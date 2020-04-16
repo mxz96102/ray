@@ -29,6 +29,7 @@ from google.protobuf.json_format import MessageToDict
 import ray
 import ray.ray_constants as ray_constants
 
+from ray.core.generated import gcs_pb2
 from ray.core.generated import node_manager_pb2
 from ray.core.generated import node_manager_pb2_grpc
 from ray.core.generated import reporter_pb2
@@ -127,21 +128,24 @@ class DashboardController(BaseDashboardController):
         if Analysis is not None:
             self.tune_stats = TuneCollector(DEFAULT_RESULTS_DIR, 2.0)
 
-    def _construct_raylet_info(self):
-        D = self.raylet_stats.get_raylet_stats()
+    def _get_actor_tree(self, raylet_stats, flat=False):
         workers_info_by_node = {
             data["nodeId"]: data.get("workersStats")
-            for data in D.values()
+            for data in raylet_stats.values()
         }
         infeasible_tasks = sum(
-            (data.get("infeasibleTasks", []) for data in D.values()), [])
+            (data.get("infeasibleTasks", []) for data in raylet_stats.values()), [])
         # ready_tasks are used to render tasks that are not schedulable
         # due to resource limitations.
         # (e.g., Actor requires 2 GPUs but there is only 1 gpu available).
-        ready_tasks = sum((data.get("readyTasks", []) for data in D.values()),
+        ready_tasks = sum((data.get("readyTasks", []) for data in raylet_stats.values()),
                           [])
-        actor_tree = self.node_stats.get_actor_tree(
-            workers_info_by_node, infeasible_tasks, ready_tasks)
+        return self.node_stats.get_actor_tree(
+            workers_info_by_node, infeasible_tasks, ready_tasks, flat=flat)
+
+    def _construct_raylet_info(self):
+        D = self.raylet_stats.get_raylet_stats()
+        actor_tree = self._get_actor_tree(D)
         for address, data in D.items():
             # process view data
             measures_dicts = {}
@@ -263,12 +267,37 @@ class DashboardController(BaseDashboardController):
         raylet_stats = self.raylet_stats.get_raylet_stats()
         for node in node_list:
             node_ip = node["ip"]
-            raylet_info = raylet_stats.get(node_ip)
-            if raylet_info:
-                raylet_info.pop("workersStats")
-                raylet_info.pop("viewData")
-                node["raylet"] = raylet_info
+            raylet_info = raylet_stats.get(node_ip, {})
+            raylet_info.pop("workersStats", None)
+            raylet_info.pop("viewData", None)
+            node.pop("workers", None)
+            node["raylet"] = raylet_info
         return node_list
+
+    def get_node_detail(self, hostname):
+        node_list = self.node_stats.get_node_list()
+        raylet_stats = self.raylet_stats.get_raylet_stats()
+        actors = self._get_actor_tree(raylet_stats, flat=True)
+        for node in node_list:
+            if node["hostname"] != hostname:
+                continue
+            node_ip = node["ip"]
+            raylet_info = raylet_stats.get(node_ip, {})
+            node["raylet"] = raylet_info
+            # merge worker stats to worker info
+            workers_stats = raylet_info.pop("workersStats", {})
+            pid_to_worker_stats = {}
+            for stats in workers_stats:
+                d = pid_to_worker_stats.setdefault(stats["pid"], {}).setdefault(
+                        stats["workerId"], stats["coreWorkerStats"])
+                d["workerId"] = stats["workerId"]
+            for worker in node["workers"]:
+                worker_stats = pid_to_worker_stats.get(worker["pid"], {})
+                worker["coreWorkerStats"] = list(worker_stats.values())
+            # construct actors
+            node["actors"] = actors
+            return node
+        return {}
 
     def start_collecting_metrics(self):
         self.node_stats.start()
@@ -368,6 +397,12 @@ class DashboardRouteHandler(BaseDashboardRouteHandler):
         D = self.dashboard_controller.get_node_list()
         return await json_response(self.is_dev, result=D, ts=now)
 
+    async def node_detail(self, req) -> aiohttp.web.Response:
+        now = datetime.datetime.utcnow()
+        hostname = req.query.get("hostname")
+        D = self.dashboard_controller.get_node_detail(hostname)
+        return await json_response(self.is_dev, result=D, ts=now)
+
 
 class MetricsExportHandler:
     def __init__(self,
@@ -459,7 +494,8 @@ def setup_dashboard_route(app: aiohttp.web.Application,
                           kill_actor=None,
                           logs=None,
                           errors=None,
-                          node_list=None):
+                          node_list=None,
+                          node_detail=None):
     def add_get_route(route, handler_func):
         if route is not None:
             app.router.add_get(route, handler_func)
@@ -478,6 +514,7 @@ def setup_dashboard_route(app: aiohttp.web.Application,
     add_get_route(logs, handler.logs)
     add_get_route(errors, handler.errors)
     add_get_route(node_list, handler.node_list)
+    add_get_route(node_detail, handler.node_detail)
 
 
 class Dashboard:
@@ -547,7 +584,8 @@ class Dashboard:
             kill_actor="/api/kill_actor",
             logs="/api/logs",
             errors="/api/errors",
-            node_list="/node/list")
+            node_list="/node/list",
+            node_detail="/node/detail")
         self.app.router.add_get("/{_}", route_handler.get_forbidden)
 
     def _setup_metrics_export(self):
@@ -667,8 +705,11 @@ class NodeStats(threading.Thread):
             node_stats = sorted(
                     (copy.deepcopy(v) for v in self._node_stats.values()),
                     key=itemgetter("boot_time"))
+            log_counts = self._calculate_log_counts()
+            error_counts = self._calculate_error_counts()
             for node_stat in node_stats:
-                node_stat.pop("workers")
+                node_stat["log_counts"] = sum(count for count in log_counts.get(node_stat["ip"], {}).values())
+                node_stat["error_counts"] = sum(count for count in error_counts.get(node_stat["ip"], {}).values())
         return node_stats
 
     def get_node_stats(self) -> Dict:
@@ -684,7 +725,7 @@ class NodeStats(threading.Thread):
             }
 
     def get_actor_tree(self, workers_info_by_node, infeasible_tasks,
-                       ready_tasks) -> Dict:
+                       ready_tasks, flat=False) -> Dict:
         now = time.time()
         # construct flattened actor tree
         flattened_tree = {"root": {"children": {}}}
@@ -739,9 +780,13 @@ class NodeStats(threading.Thread):
 
         # construct actor tree
         actor_tree = flattened_tree
-        for actor_id, parent_id in child_to_parent.items():
-            actor_tree[parent_id]["children"][actor_id] = actor_tree[actor_id]
-        return actor_tree["root"]["children"]
+        if flat:
+            actor_tree.pop("root")
+            return actor_tree
+        else:
+            for actor_id, parent_id in child_to_parent.items():
+                actor_tree[parent_id]["children"][actor_id] = actor_tree[actor_id]
+            return actor_tree["root"]["children"]
 
     def get_logs(self, hostname, pid):
         ip = self._node_stats.get(hostname, {"ip": None})["ip"]
@@ -786,7 +831,7 @@ class NodeStats(threading.Thread):
                 self._addr_to_actor_id[addr] = actor_data["ActorID"]
                 self._addr_to_extra_info_dict[addr] = {
                     "jobId": actor_data["JobID"],
-                    "state": actor_data["State"],
+                    "state": gcs_pb2.ActorTableData.ActorState.Name(actor_data["State"]),
                     "isDirectCall": actor_data["IsDirectCall"],
                     "timestamp": actor_data["Timestamp"]
                 }

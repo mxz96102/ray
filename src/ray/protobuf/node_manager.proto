@@ -100,6 +100,8 @@ message WorkerStats {
   CoreWorkerStats core_worker_stats = 3;
   // Error string if fetching core worker stats failed.
   string fetch_error = 4;
+  // Worker id of core worker.
+  bytes worker_id = 5;
 }
 
 message GetNodeStatsReply {

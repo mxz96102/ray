@@ -59,6 +59,10 @@ class BaseDashboardController(ABC):
         raise NotImplementedError("Please implement this method.")
 
     @abstractmethod
+    def get_node_detail(self, hostname):
+        raise NotImplementedError("Please implement this method.")
+
+    @abstractmethod
     def start_collecting_metrics(self):
         """Start threads/processes/actors to collect metrics
 
@@ -125,4 +129,8 @@ class BaseDashboardRouteHandler(ABC):
 
     @abstractmethod
     async def node_list(self, req) -> aiohttp.web.Response:
+        raise NotImplementedError("Please implement this method.")
+
+    @abstractmethod
+    async def node_detail(self, req) -> aiohttp.web.Response:
         raise NotImplementedError("Please implement this method.")
