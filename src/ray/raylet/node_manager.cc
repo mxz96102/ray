@@ -3448,6 +3448,7 @@ void NodeManager::FlushObjectsToFree() {
 void NodeManager::HandleGetNodeStats(const rpc::GetNodeStatsRequest &node_stats_request,
                                      rpc::GetNodeStatsReply *reply,
                                      rpc::SendReplyCallback send_reply_callback) {
+  reply->set_pid(getpid());
   // NOTE(sang): Currently reporting only infeasible/ready ActorCreationTask
   // because Ray dashboard only renders actorCreationTask as of Feb 3 2020.
   // TODO(sang): Support dashboard for non-ActorCreationTask.

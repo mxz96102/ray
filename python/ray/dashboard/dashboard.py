@@ -22,7 +22,7 @@ import uuid
 from base64 import b64decode
 from collections import defaultdict
 from operator import itemgetter
-from typing import Dict
+from typing import Dict, List
 
 import grpc
 from google.protobuf.json_format import MessageToDict
@@ -165,7 +165,7 @@ class DashboardController(BaseDashboardController):
                     format_resource(resource_name,
                                     total_resource - available_resource),
                     format_resource(resource_name, total_resource)))
-            data["extraInfo"] = ", ".join(extra_info_strings) + "\n"
+            data["extraInfo"] = ", ".join(extra_info_strings)
             if os.environ.get("RAY_DASHBOARD_DEBUG"):
                 # process object store info
                 extra_info_strings = []
@@ -257,6 +257,18 @@ class DashboardController(BaseDashboardController):
 
     def get_errors(self, hostname, pid):
         return self.node_stats.get_errors(hostname, pid)
+
+    def get_node_list(self):
+        node_list = self.node_stats.get_node_list()
+        raylet_stats = self.raylet_stats.get_raylet_stats()
+        for node in node_list:
+            node_ip = node["ip"]
+            raylet_info = raylet_stats.get(node_ip)
+            if raylet_info:
+                raylet_info.pop("workersStats")
+                raylet_info.pop("viewData")
+                node["raylet"] = raylet_info
+        return node_list
 
     def start_collecting_metrics(self):
         self.node_stats.start()
@@ -351,6 +363,11 @@ class DashboardRouteHandler(BaseDashboardRouteHandler):
         result = self.dashboard_controller.get_errors(hostname, pid)
         return await json_response(self.is_dev, result=result)
 
+    async def node_list(self, req) -> aiohttp.web.Response:
+        now = datetime.datetime.utcnow()
+        D = self.dashboard_controller.get_node_list()
+        return await json_response(self.is_dev, result=D, ts=now)
+
 
 class MetricsExportHandler:
     def __init__(self,
@@ -441,7 +458,8 @@ def setup_dashboard_route(app: aiohttp.web.Application,
                           get_profiling_info=None,
                           kill_actor=None,
                           logs=None,
-                          errors=None):
+                          errors=None,
+                          node_list=None):
     def add_get_route(route, handler_func):
         if route is not None:
             app.router.add_get(route, handler_func)
@@ -459,6 +477,7 @@ def setup_dashboard_route(app: aiohttp.web.Application,
     add_get_route(kill_actor, handler.kill_actor)
     add_get_route(logs, handler.logs)
     add_get_route(errors, handler.errors)
+    add_get_route(node_list, handler.node_list)
 
 
 class Dashboard:
@@ -527,7 +546,8 @@ class Dashboard:
             get_profiling_info="/api/get_profiling_info",
             kill_actor="/api/kill_actor",
             logs="/api/logs",
-            errors="/api/errors")
+            errors="/api/errors",
+            node_list="/node/list")
         self.app.router.add_get("/{_}", route_handler.get_forbidden)
 
     def _setup_metrics_export(self):
@@ -563,7 +583,7 @@ class Dashboard:
         logger.info("Dashboard running on {}".format(url))
 
     def run(self):
-        self.log_dashboard_url()
+        # self.log_dashboard_url()
         self.dashboard_controller.start_collecting_metrics()
         if self.metrics_export_address:
             self._start_exporting_metrics()
@@ -640,6 +660,16 @@ class NodeStats(threading.Thread):
             k: v
             for k, v in self._node_stats.items() if current(v["now"], now)
         }
+
+    def get_node_list(self) -> List:
+        with self._node_stats_lock:
+            self._purge_outdated_stats()
+            node_stats = sorted(
+                    (copy.deepcopy(v) for v in self._node_stats.values()),
+                    key=itemgetter("boot_time"))
+            for node_stat in node_stats:
+                node_stat.pop("workers")
+        return node_stats
 
     def get_node_stats(self) -> Dict:
         with self._node_stats_lock:
@@ -932,6 +962,7 @@ class RayletStats(threading.Thread):
                         node_manager_pb2.GetNodeStatsRequest(), timeout=2)
                     reply_dict = MessageToDict(reply)
                     reply_dict["nodeId"] = node_id
+                    reply_dict["nodeManagerPort"] = node["NodeManagerPort"]
                     replies[node["NodeManagerAddress"]] = reply_dict
                 with self._raylet_stats_lock:
                     for address, reply_dict in replies.items():
@@ -1123,6 +1154,17 @@ class TuneCollector(threading.Thread):
         return trial_details
 
 
+def setup_logger(logging_level, logging_format):
+    """Setup default logging for ray."""
+    if type(logging_level) is str:
+        logging_level = logging.getLevelName(logging_level.upper())
+    logger.setLevel(logging_level)
+    _default_handler = logging.StreamHandler()
+    logger.addHandler(_default_handler)
+    _default_handler.setFormatter(logging.Formatter(logging_format))
+    logger.propagate = False
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description=("Parse Redis server for the "
@@ -1169,6 +1211,7 @@ if __name__ == "__main__":
         help="Specify the path of the temporary directory use by Ray process.")
     args = parser.parse_args()
     ray.utils.setup_logger(args.logging_level, args.logging_format)
+    setup_logger(args.logging_level, args.logging_format)
 
     # TODO(sang): Add a URL validation.
     metrics_export_address = os.environ.get("METRICS_EXPORT_ADDRESS")

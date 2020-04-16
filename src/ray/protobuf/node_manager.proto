@@ -108,6 +108,7 @@ message GetNodeStatsReply {
   uint32 num_workers = 3;
   repeated TaskSpec infeasible_tasks = 4;
   repeated TaskSpec ready_tasks = 5;
+  int32 pid = 6;
 }
 
 message GlobalGCRequest {
