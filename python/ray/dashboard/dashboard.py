@@ -294,8 +294,10 @@ class DashboardController(BaseDashboardController):
             for worker in node["workers"]:
                 worker_stats = pid_to_worker_stats.get(worker["pid"], {})
                 worker["coreWorkerStats"] = list(worker_stats.values())
-            # construct actors
-            node["actors"] = actors
+            # filter actors by node id
+            node["actors"] = [(actor_id, actor)
+                              for actor_id, actor in actors.items()
+                              if actor.get("nodeId") == raylet_info["nodeId"]]
             return node
         return {}
 
