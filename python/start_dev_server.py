@@ -3,8 +3,8 @@ import ray
 import pprint
 import time
 
-os.environ.pop('http_proxy')
-os.environ.pop('https_proxy')
+os.environ.pop('http_proxy', None)
+os.environ.pop('https_proxy', None)
 
 r = ray.init(num_cpus=2, num_gpus=2)
 pprint.pprint(r)
