@@ -6,7 +6,7 @@ import time
 os.environ.pop('http_proxy', None)
 os.environ.pop('https_proxy', None)
 
-r = ray.init(num_cpus=2, num_gpus=2)
+r = ray.init(num_cpus=2, num_gpus=2, webui_host='0.0.0.0')
 pprint.pprint(r)
 
 
