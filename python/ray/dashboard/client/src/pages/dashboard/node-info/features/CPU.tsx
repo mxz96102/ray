@@ -3,15 +3,15 @@ import { Accessor } from "../../../../common/tableUtils";
 import UsageBar from "../../../../common/UsageBar";
 import { getWeightedAverage } from "../../../../common/util";
 import {
-  ClusterFeatureRenderFn,
+  ClusterFeature,
+  NodeFeature,
   NodeFeatureData,
-  NodeFeatureRenderFn,
   NodeInfoFeature,
+  WorkerFeature,
   WorkerFeatureData,
-  WorkerFeatureRenderFn,
 } from "./types";
 
-export const ClusterCPU: ClusterFeatureRenderFn = ({ nodes }) => {
+export const ClusterCPU: ClusterFeature = ({ nodes }) => {
   const cpuWeightedAverage = getWeightedAverage(
     nodes.map((node) => ({ weight: node.cpus[0], value: node.cpu })),
   );
@@ -25,7 +25,7 @@ export const ClusterCPU: ClusterFeatureRenderFn = ({ nodes }) => {
   );
 };
 
-export const NodeCPU: NodeFeatureRenderFn = ({ node }) => (
+export const NodeCPU: NodeFeature = ({ node }) => (
   <div style={{ minWidth: 60 }}>
     <UsageBar percent={node.cpu} text={`${node.cpu.toFixed(1)}%`} />
   </div>
@@ -34,24 +34,24 @@ export const nodeCPUAccessor: Accessor<NodeFeatureData> = ({ node }) => {
   return node.cpu;
 };
 
-export const WorkerCPU: WorkerFeatureRenderFn = ({ worker }) => (
+export const WorkerCPU: WorkerFeature = ({ worker }) => (
   <div style={{ minWidth: 60 }}>
     <UsageBar
-      percent={worker.cpu_percent}
-      text={`${worker.cpu_percent.toFixed(1)}%`}
+      percent={worker.cpuPercent}
+      text={`${worker.cpuPercent.toFixed(1)}%`}
     />
   </div>
 );
 
 export const workerCPUAccessor: Accessor<WorkerFeatureData> = ({ worker }) => {
-  return worker.cpu_percent;
+  return worker.cpuPercent;
 };
 
 const cpuFeature: NodeInfoFeature = {
   id: "cpu",
-  ClusterFeatureRenderFn: ClusterCPU,
-  NodeFeatureRenderFn: NodeCPU,
-  WorkerFeatureRenderFn: WorkerCPU,
+  ClusterFeature: ClusterCPU,
+  NodeFeature: NodeCPU,
+  WorkerFeature: WorkerCPU,
   nodeAccessor: nodeCPUAccessor,
   workerAccessor: workerCPUAccessor,
 };

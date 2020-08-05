@@ -10,12 +10,11 @@ import {
 } from "@material-ui/core";
 import React, { useState } from "react";
 import { useSelector } from "react-redux";
-import { RayletInfoResponse } from "../../../api";
 import SortableTableHead, {
   HeaderInfo,
 } from "../../../common/SortableTableHead";
 import { getFnComparator, Order, stableSort } from "../../../common/tableUtils";
-import { sum } from "../../../common/util";
+import { NodeDetails } from "../../../newApi";
 import { StoreState } from "../../../store";
 import Errors from "./dialogs/errors/Errors";
 import Logs from "./dialogs/logs/Logs";
@@ -30,7 +29,6 @@ import ramFeature from "./features/RAM";
 import receivedFeature from "./features/Received";
 import sentFeature from "./features/Sent";
 import {
-  Node,
   nodeInfoColumnId,
   NodeInfoFeature,
   WorkerFeatureData,
@@ -64,24 +62,18 @@ const sortWorkers = (
 };
 
 const makeGroupedTableContents = (
-  nodes: Node[],
+  nodes: NodeDetails[],
   sortWorkerComparator: any,
   sortGroupComparator: any,
-  rayletInfo: RayletInfoResponse | null,
   nodeInfoFeatures: NodeInfoFeature[],
 ) => {
   const sortedGroups = stableSort(nodes, sortGroupComparator);
   return sortedGroups.map((node) => {
     const workerFeatureData: WorkerFeatureData[] = node.workers.map(
       (worker) => {
-        const rayletWorker =
-          rayletInfo?.nodes?.[node.ip]?.workersStats?.find(
-            (workerStats) => workerStats.pid === worker.pid,
-          ) || null;
         return {
-          node: node,
+          node,
           worker,
-          rayletWorker,
         };
       },
     );
@@ -103,27 +95,19 @@ const makeGroupedTableContents = (
 };
 
 const makeUngroupedTableContents = (
-  nodes: Node[],
+  nodes: NodeDetails[],
   sortWorkerComparator: any,
-  rayletInfo: RayletInfoResponse | null,
   nodeInfoFeatures: NodeInfoFeature[],
 ) => {
   const workerInfoFeatures = nodeInfoFeatures.map(
-    (feature) => feature.WorkerFeatureRenderFn,
+    (feature) => feature.WorkerFeature,
   );
-  const allWorkerFeatures: WorkerFeatureData[] = nodes.flatMap((node) => {
-    return node.workers.map((worker) => {
-      const rayletWorker =
-        rayletInfo?.nodes?.[node.ip]?.workersStats?.find(
-          (workerStats) => workerStats.pid === worker.pid,
-        ) || null;
-      return {
-        node: node,
-        worker,
-        rayletWorker,
-      };
-    });
-  });
+  const allWorkerFeatures: WorkerFeatureData[] = nodes.flatMap((node) =>
+    node.workers.map((worker) => ({
+      node,
+      worker,
+    })),
+  );
   const sortedWorkers = sortWorkers(allWorkerFeatures, sortWorkerComparator);
   return sortedWorkers.map((workerFeatureDatum, i) => (
     <NodeWorkerRow
@@ -149,10 +133,7 @@ const useNodeInfoStyles = makeStyles((theme: Theme) =>
   }),
 );
 
-const nodeInfoSelector = (state: StoreState) => ({
-  nodeInfo: state.dashboard.nodeInfo,
-  rayletInfo: state.dashboard.rayletInfo,
-});
+const nodeDetailsSelector = (state: StoreState) => state.dashboard.nodeDetails;
 
 type DialogState = {
   hostname: string;
@@ -182,14 +163,12 @@ const NodeInfo: React.FC<{}> = () => {
   const toggleOrder = () => setOrder(order === "asc" ? "desc" : "asc");
   const [orderBy, setOrderBy] = React.useState<nodeInfoColumnId | null>(null);
   const classes = useNodeInfoStyles();
-  const { nodeInfo, rayletInfo } = useSelector(nodeInfoSelector);
+  const nodeDetails = Object.values(useSelector(nodeDetailsSelector));
 
-  if (nodeInfo === null || rayletInfo === null) {
+  if (!nodeDetails) {
     return <Typography color="textSecondary">Loading...</Typography>;
   }
-  const clusterTotalWorkers = sum(
-    nodeInfo.clients.map((c) => c.workers.length),
-  );
+
   const nodeInfoFeatures: NodeInfoFeature[] = [
     hostFeature,
     workersFeature,
@@ -216,16 +195,14 @@ const NodeInfo: React.FC<{}> = () => {
     sortWorkerAccessor && getFnComparator(order, sortWorkerAccessor);
   const tableContents = isGrouped
     ? makeGroupedTableContents(
-        nodeInfo.clients,
+        nodeDetails,
         sortWorkerComparator,
         sortNodeComparator,
-        rayletInfo,
         nodeInfoFeatures,
       )
     : makeUngroupedTableContents(
-        nodeInfo.clients,
+        nodeDetails,
         sortWorkerComparator,
-        rayletInfo,
         nodeInfoFeatures,
       );
   return (
@@ -258,11 +235,8 @@ const NodeInfo: React.FC<{}> = () => {
         <TableBody>
           {tableContents}
           <TotalRow
-            clusterTotalWorkers={clusterTotalWorkers}
-            nodes={nodeInfo.clients}
-            features={nodeInfoFeatures.map(
-              (feature) => feature.ClusterFeatureRenderFn,
-            )}
+            nodes={nodeDetails}
+            features={nodeInfoFeatures.map((feature) => feature.ClusterFeature)}
           />
         </TableBody>
       </Table>

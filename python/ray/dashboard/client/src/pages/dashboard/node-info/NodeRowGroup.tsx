@@ -9,8 +9,8 @@ import AddIcon from "@material-ui/icons/Add";
 import RemoveIcon from "@material-ui/icons/Remove";
 import classNames from "classnames";
 import React, { useState } from "react";
-import { NodeInfoResponse } from "../../../api";
 import { StyledTableCell } from "../../../common/TableCell";
+import { NodeDetails } from "../../../newApi";
 import { NodeInfoFeature, WorkerFeatureData } from "./features/types";
 import { NodeWorkerRow } from "./NodeWorkerRow";
 
@@ -38,13 +38,9 @@ const useNodeRowGroupStyles = makeStyles((theme: Theme) =>
   }),
 );
 
-type ArrayType<T> = T extends Array<infer U> ? U : never;
-type Node = ArrayType<NodeInfoResponse["clients"]>;
-
 type NodeRowGroupProps = {
   features: NodeInfoFeature[];
-  node: Node;
-  rayletInfo?: string;
+  node: NodeDetails;
   workerFeatureData: WorkerFeatureData[];
   initialExpanded: boolean;
 };
@@ -53,14 +49,13 @@ const NodeRowGroup: React.FC<NodeRowGroupProps> = ({
   features,
   node,
   initialExpanded,
-  rayletInfo,
   workerFeatureData,
 }) => {
   const [expanded, setExpanded] = useState<boolean>(initialExpanded);
   const toggleExpand = () => setExpanded(!expanded);
   const classes = useNodeRowGroupStyles();
   const renderedNodeFeatures = features.map((nodeInfoFeature, i) => {
-    const FeatureComponent = nodeInfoFeature.NodeFeatureRenderFn;
+    const FeatureComponent = nodeInfoFeature.NodeFeature;
     return (
       <StyledTableCell className={classes.cell} key={i}>
         <FeatureComponent node={node} />
@@ -84,24 +79,11 @@ const NodeRowGroup: React.FC<NodeRowGroupProps> = ({
       </TableRow>
       {expanded && (
         <React.Fragment>
-          {rayletInfo !== undefined && (
-            <TableRow hover>
-              <TableCell className={classes.cell} />
-              <TableCell
-                className={classNames(classes.cell, classes.extraInfo)}
-                colSpan={features.length}
-              >
-                {rayletInfo}
-              </TableCell>
-            </TableRow>
-          )}
           {workerFeatureData.map((featureData, index: number) => {
             return (
               <NodeWorkerRow
                 key={index}
-                features={features.map(
-                  (feature) => feature.WorkerFeatureRenderFn,
-                )}
+                features={features.map((feature) => feature.WorkerFeature)}
                 data={featureData}
               />
             );

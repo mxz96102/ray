@@ -1,24 +1,27 @@
 import { Box, Tooltip, Typography } from "@material-ui/core";
 import React from "react";
-import { GPUStats, RayletWorkerStats, ResourceSlot } from "../../../../api";
 import { RightPaddedTypography } from "../../../../common/CustomTypography";
 import { Accessor } from "../../../../common/tableUtils";
-
 import UsageBar from "../../../../common/UsageBar";
 import { getWeightedAverage, sum } from "../../../../common/util";
 import {
-  ClusterFeatureRenderFn,
-  Node,
+  GPUStats,
+  NodeDetails,
+  ResourceSlot,
+  Worker,
+} from "../../../../newApi";
+import {
+  ClusterFeature,
+  NodeFeature,
   NodeFeatureData,
-  NodeFeatureRenderFn,
   NodeInfoFeature,
+  WorkerFeature,
   WorkerFeatureData,
-  WorkerFeatureRenderFn,
 } from "./types";
 
 const GPU_COL_WIDTH = 120;
 
-const clusterGPUUtilization = (nodes: Array<Node>): number => {
+const clusterGPUUtilization = (nodes: NodeDetails[]): number => {
   const utils = nodes
     .map((node) => ({
       weight: node.gpus.length,
@@ -31,11 +34,11 @@ const clusterGPUUtilization = (nodes: Array<Node>): number => {
   return getWeightedAverage(utils);
 };
 
-const nodeGPUUtilization = (node: Node): number => {
+const nodeGPUUtilization = (node: NodeDetails): number => {
   if (!node.gpus || node.gpus.length === 0) {
     return NaN;
   }
-  const utilizationSum = sum(node.gpus.map((gpu) => gpu.utilization_gpu));
+  const utilizationSum = sum(node.gpus.map((gpu) => gpu.utilizationGpu));
   const avgUtilization = utilizationSum / node.gpus.length;
   return avgUtilization;
 };
@@ -43,7 +46,7 @@ const nodeGPUUtilization = (node: Node): number => {
 const nodeGPUAccessor: Accessor<NodeFeatureData> = ({ node }) =>
   nodeGPUUtilization(node);
 
-const ClusterGPU: ClusterFeatureRenderFn = ({ nodes }) => {
+const ClusterGPU: ClusterFeature = ({ nodes }) => {
   const clusterAverageUtilization = clusterGPUUtilization(nodes);
   return (
     <div style={{ minWidth: GPU_COL_WIDTH }}>
@@ -61,7 +64,7 @@ const ClusterGPU: ClusterFeatureRenderFn = ({ nodes }) => {
   );
 };
 
-const NodeGPU: NodeFeatureRenderFn = ({ node }) => {
+const NodeGPU: NodeFeature = ({ node }) => {
   const hasGPU = node.gpus !== undefined && node.gpus.length !== 0;
   return (
     <div style={{ minWidth: GPU_COL_WIDTH }}>
@@ -88,8 +91,8 @@ const NodeGPUEntry: React.FC<NodeGPUEntryProps> = ({ gpu, slot }) => {
         <RightPaddedTypography variant="body1">[{slot}]:</RightPaddedTypography>
       </Tooltip>
       <UsageBar
-        percent={gpu.utilization_gpu}
-        text={`${gpu.utilization_gpu.toFixed(1)}%`}
+        percent={gpu.utilizationGpu}
+        text={`${gpu.utilizationGpu.toFixed(1)}%`}
       />
     </Box>
   );
@@ -119,8 +122,8 @@ const WorkerGPUEntry: React.FC<WorkerGPUEntryProps> = ({ resourceSlot }) => {
   );
 };
 
-const WorkerGPU: WorkerFeatureRenderFn = ({ rayletWorker }) => {
-  const workerRes = rayletWorker?.coreWorkerStats.usedResources;
+const WorkerGPU: WorkerFeature = ({ worker }) => {
+  const workerRes = worker?.coreWorkerStats[0]?.usedResources;
   const workerUsedGPUResources = workerRes?.["GPU"];
   let message;
   if (workerUsedGPUResources === undefined) {
@@ -147,8 +150,8 @@ const WorkerGPU: WorkerFeatureRenderFn = ({ rayletWorker }) => {
   return <div style={{ minWidth: 60 }}>{message}</div>;
 };
 
-const workerGPUUtilization = (rayletWorker: RayletWorkerStats | null) => {
-  const workerRes = rayletWorker?.coreWorkerStats.usedResources;
+const workerGPUUtilization = (worker: Worker) => {
+  const workerRes = worker?.coreWorkerStats[0]?.usedResources;
   const workerUsedGPUResources = workerRes?.["GPU"];
   return (
     workerUsedGPUResources &&
@@ -160,15 +163,15 @@ const workerGPUUtilization = (rayletWorker: RayletWorkerStats | null) => {
   );
 };
 
-const workerGPUAccessor: Accessor<WorkerFeatureData> = ({ rayletWorker }) => {
-  return workerGPUUtilization(rayletWorker) ?? 0;
+const workerGPUAccessor: Accessor<WorkerFeatureData> = ({ worker }) => {
+  return workerGPUUtilization(worker) ?? 0;
 };
 
 const gpuFeature: NodeInfoFeature = {
   id: "gpu",
-  ClusterFeatureRenderFn: ClusterGPU,
-  NodeFeatureRenderFn: NodeGPU,
-  WorkerFeatureRenderFn: WorkerGPU,
+  ClusterFeature: ClusterGPU,
+  NodeFeature: NodeGPU,
+  WorkerFeature: WorkerGPU,
   nodeAccessor: nodeGPUAccessor,
   workerAccessor: workerGPUAccessor,
 };

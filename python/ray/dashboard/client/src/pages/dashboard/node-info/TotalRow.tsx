@@ -7,9 +7,9 @@ import {
 } from "@material-ui/core";
 import LayersIcon from "@material-ui/icons/Layers";
 import React from "react";
-import { NodeInfoResponse } from "../../../api";
 import { StyledTableCell } from "../../../common/TableCell";
-import { ClusterFeatureRenderFn } from "./features/types";
+import { NodeDetails } from "../../../newApi";
+import { ClusterFeature } from "./features/types";
 
 const useTotalRowStyles = makeStyles((theme: Theme) =>
   createStyles({
@@ -32,9 +32,8 @@ const useTotalRowStyles = makeStyles((theme: Theme) =>
 );
 
 type TotalRowProps = {
-  nodes: NodeInfoResponse["clients"];
-  clusterTotalWorkers: number;
-  features: (ClusterFeatureRenderFn | undefined)[];
+  nodes: NodeDetails[];
+  features: (ClusterFeature | undefined)[];
 };
 
 const TotalRow: React.FC<TotalRowProps> = ({ nodes, features }) => {
