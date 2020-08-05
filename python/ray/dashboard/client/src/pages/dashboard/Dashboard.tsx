@@ -6,6 +6,7 @@ import {
   Typography,
   WithStyles,
   withStyles,
+  Paper,
 } from "@material-ui/core";
 import React from "react";
 import { connect } from "react-redux";
@@ -29,8 +30,7 @@ import Tune from "./tune/Tune";
 const styles = (theme: Theme) =>
   createStyles({
     root: {
-      backgroundColor: theme.palette.background.paper,
-      padding: theme.spacing(2),
+      padding: theme.spacing(4),
       "& > :not(:first-child)": {
         marginTop: theme.spacing(4),
       },
@@ -40,6 +40,9 @@ const styles = (theme: Theme) =>
       borderBottomStyle: "solid",
       borderBottomWidth: 1,
     },
+    paper: {
+      padding: theme.spacing(2),
+    }
   });
 
 const mapStateToProps = (state: StoreState) => ({
@@ -127,20 +130,22 @@ class Dashboard extends React.Component<
     const SelectedComponent = tabs[tab].component;
     return (
       <div className={classes.root}>
-        <Typography variant="h5">Ray Dashboard</Typography>
-        <Tabs
-          className={classes.tabs}
-          indicatorColor="primary"
-          onChange={this.handleTabChange}
-          textColor="primary"
-          value={tab}
-        >
-          {tabs.map(({ label }) => (
-            <Tab key={label} label={label} />
-          ))}
-        </Tabs>
-        <SelectedComponent />
-        <LastUpdated />
+        <Typography variant="h5">Dashboard</Typography>
+        <Paper className={classes.paper}>
+          <Tabs
+            className={classes.tabs}
+            indicatorColor="primary"
+            onChange={this.handleTabChange}
+            textColor="primary"
+            value={tab}
+          >
+            {tabs.map(({ label }) => (
+              <Tab key={label} label={label} />
+            ))}
+          </Tabs>
+          <SelectedComponent />
+          <LastUpdated />
+        </Paper>
       </div>
     );
   }
