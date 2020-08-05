@@ -54,14 +54,14 @@ public interface ResourceConfig extends Config {
   /**
    * Whether to enable CPU limit in resource control.
    */
-  @DefaultValue(value = "true")
+  @DefaultValue(value = "false")
   @Key(value = TASK_RESOURCE_CPU_LIMIT_ENABLE)
   boolean isTaskCpuResourceLimit();
 
   /**
    * Whether to enable memory limit in resource control.
    */
-  @DefaultValue(value = "true")
+  @DefaultValue(value = "false")
   @Key(value = TASK_RESOURCE_MEM_LIMIT_ENABLE)
   boolean isTaskMemResourceLimit();
 
@@ -70,7 +70,7 @@ public interface ResourceConfig extends Config {
    */
   @DefaultValue(value = "500")
   @Key(MAX_ACTOR_NUM_PER_CONTAINER)
-  int maxActorNumPerContainer();
+  int actorNumPerContainer();
 
   /**
    * The interval between detecting ray cluster nodes.

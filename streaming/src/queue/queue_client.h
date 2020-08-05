@@ -1,7 +1,7 @@
-#ifndef _STREAMING_QUEUE_CLIENT_H_
-#define _STREAMING_QUEUE_CLIENT_H_
-#include "queue_handler.h"
-#include "transport.h"
+#pragma once
+
+#include "queue/queue_handler.h"
+#include "queue/transport.h"
 
 namespace ray {
 namespace streaming {
@@ -17,9 +17,7 @@ class ReaderClient {
   /// \param[in] async_func DataReader's raycall function descriptor to be called by
   /// DataWriter, asynchronous semantics \param[in] sync_func DataReader's raycall
   /// function descriptor to be called by DataWriter, synchronous semantics
-  ReaderClient(RayFunction &async_func, RayFunction &sync_func) {
-    DownstreamQueueMessageHandler::peer_async_function_ = async_func;
-    DownstreamQueueMessageHandler::peer_sync_function_ = sync_func;
+  ReaderClient() {
     downstream_handler_ = ray::streaming::DownstreamQueueMessageHandler::CreateService(
         CoreWorkerProcess::GetCoreWorker().GetWorkerContext().GetCurrentActorID());
   }
@@ -38,9 +36,7 @@ class ReaderClient {
 /// Interface of streaming queue for DataWriter. Similar to ReaderClient.
 class WriterClient {
  public:
-  WriterClient(RayFunction &async_func, RayFunction &sync_func) {
-    UpstreamQueueMessageHandler::peer_async_function_ = async_func;
-    UpstreamQueueMessageHandler::peer_sync_function_ = sync_func;
+  WriterClient() {
     upstream_handler_ = ray::streaming::UpstreamQueueMessageHandler::CreateService(
         CoreWorkerProcess::GetCoreWorker().GetWorkerContext().GetCurrentActorID());
   }
@@ -54,4 +50,3 @@ class WriterClient {
 };
 }  // namespace streaming
 }  // namespace ray
-#endif

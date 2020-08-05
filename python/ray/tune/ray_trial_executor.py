@@ -14,7 +14,7 @@ from ray.resource_spec import ResourceSpec
 from ray.tune.durable_trainable import DurableTrainable
 from ray.tune.error import AbortTrialExecution, TuneError
 from ray.tune.logger import NoopLogger
-from ray.tune.result import TRIAL_INFO
+from ray.tune.result import TRIAL_INFO, LOGDIR_PATH, STDOUT_FILE, STDERR_FILE
 from ray.tune.resources import Resources
 from ray.tune.trainable import TrainableUtil
 from ray.tune.trial import Trial, Checkpoint, Location, TrialInfo
@@ -102,7 +102,7 @@ class RayTrialExecutor(TrialExecutor):
         self._trial_queued = False
         self._running = {}
         # Since trial resume after paused should not run
-        # trial.train.remote(), thus no more new remote object id generated.
+        # trial.train.remote(), thus no more new remote object ref generated.
         # We use self._paused to store paused trials here.
         self._paused = {}
 
@@ -161,10 +161,11 @@ class RayTrialExecutor(TrialExecutor):
 
         def logger_creator(config):
             # Set the working dir in the remote process, for user file writes
-            os.makedirs(remote_logdir, exist_ok=True)
+            logdir = config.pop(LOGDIR_PATH, remote_logdir)
+            os.makedirs(logdir, exist_ok=True)
             if not ray.worker._mode() == ray.worker.LOCAL_MODE:
-                os.chdir(remote_logdir)
-            return NoopLogger(config, remote_logdir)
+                os.chdir(logdir)
+            return NoopLogger(config, logdir)
 
         # Clear the Trial's location (to be updated later on result)
         # since we don't know where the remote runner is placed.
@@ -174,6 +175,10 @@ class RayTrialExecutor(TrialExecutor):
         # configure the remote runner to use a noop-logger.
         trial_config = copy.deepcopy(trial.config)
         trial_config[TRIAL_INFO] = TrialInfo(trial)
+
+        stdout_file, stderr_file = trial.log_to_file
+        trial_config[STDOUT_FILE] = stdout_file
+        trial_config[STDERR_FILE] = stderr_file
         kwargs = {
             "config": trial_config,
             "logger_creator": logger_creator,
@@ -213,7 +218,7 @@ class RayTrialExecutor(TrialExecutor):
         trial_item = self._find_item(self._running, trial)
         assert len(trial_item) < 2, trial_item
 
-    def _start_trial(self, trial, checkpoint=None, runner=None):
+    def _start_trial(self, trial, checkpoint=None, runner=None, train=True):
         """Starts trial and restores last result if trial was paused.
 
         Args:
@@ -223,6 +228,7 @@ class RayTrialExecutor(TrialExecutor):
                 from the beginning.
             runner (Trainable): The remote runner to use. This can be the
                 cached actor. If None, a new runner is created.
+            train (bool): Whether or not to start training.
 
         See `RayTrialExecutor.restore` for possible errors raised.
         """
@@ -239,7 +245,7 @@ class RayTrialExecutor(TrialExecutor):
             # If Trial was in flight when paused, self._paused stores result.
             self._paused.pop(previous_run[0])
             self._running[previous_run[0]] = trial
-        elif not trial.is_restoring:
+        elif train and not trial.is_restoring:
             self._train(trial)
 
     def _stop_trial(self, trial, error=False, error_msg=None,
@@ -255,9 +261,6 @@ class RayTrialExecutor(TrialExecutor):
             error_msg (str): Optional error message.
             stop_logger (bool): Whether to shut down the trial logger.
         """
-        if stop_logger:
-            trial.close_logger()
-
         self.set_status(trial, Trial.ERROR if error else Trial.TERMINATED)
         trial.set_location(Location())
 
@@ -277,8 +280,10 @@ class RayTrialExecutor(TrialExecutor):
             self.set_status(trial, Trial.ERROR)
         finally:
             trial.set_runner(None)
+            if stop_logger:
+                trial.close_logger()
 
-    def start_trial(self, trial, checkpoint=None):
+    def start_trial(self, trial, checkpoint=None, train=True):
         """Starts the trial.
 
         Will not return resources if trial repeatedly fails on start.
@@ -287,10 +292,11 @@ class RayTrialExecutor(TrialExecutor):
             trial (Trial): Trial to be started.
             checkpoint (Checkpoint): A Python object or path storing the state
                 of trial.
+            train (bool): Whether or not to start training.
         """
         self._commit_resources(trial.resources)
         try:
-            self._start_trial(trial, checkpoint)
+            self._start_trial(trial, checkpoint, train=train)
         except AbortTrialExecution:
             logger.exception("Trial %s: Error starting runner, aborting!",
                              trial)
@@ -338,14 +344,12 @@ class RayTrialExecutor(TrialExecutor):
         super(RayTrialExecutor, self).pause_trial(trial)
 
     def reset_trial(self, trial, new_config, new_experiment_tag):
-        """Tries to invoke `Trainable.reset_config()` to reset trial.
+        """Tries to invoke `Trainable.reset()` to reset trial.
 
         Args:
             trial (Trial): Trial to be reset.
-            new_config (dict): New configuration for Trial
-                trainable.
-            new_experiment_tag (str): New experiment name
-                for trial.
+            new_config (dict): New configuration for Trial trainable.
+            new_experiment_tag (str): New experiment name for trial.
 
         Returns:
             True if `reset_config` is successful else False.
@@ -354,14 +358,13 @@ class RayTrialExecutor(TrialExecutor):
         trial.config = new_config
         trainable = trial.runner
         with self._change_working_directory(trial):
-            with warn_if_slow("reset_config"):
+            with warn_if_slow("reset"):
                 try:
                     reset_val = ray.get(
-                        trainable.reset_config.remote(new_config),
+                        trainable.reset.remote(new_config, trial.logdir),
                         DEFAULT_GET_TIMEOUT)
                 except RayTimeoutError:
-                    logger.exception("Trial %s: reset_config timed out.",
-                                     trial)
+                    logger.exception("Trial %s: reset timed out.", trial)
                     return False
         return reset_val
 
@@ -633,7 +636,7 @@ class RayTrialExecutor(TrialExecutor):
                 self._running[value] = trial
         return checkpoint
 
-    def restore(self, trial, checkpoint=None):
+    def restore(self, trial, checkpoint=None, block=False):
         """Restores training state from a given model checkpoint.
 
         Args:
@@ -641,6 +644,7 @@ class RayTrialExecutor(TrialExecutor):
             checkpoint (Checkpoint): The checkpoint to restore from. If None,
                 the most recent PERSISTENT checkpoint is used. Defaults to
                 None.
+            block (bool): Whether or not to block on restore before returning.
 
         Raises:
             RuntimeError: This error is raised if no runner is found.
@@ -669,19 +673,22 @@ class RayTrialExecutor(TrialExecutor):
             elif trial.sync_on_checkpoint:
                 # This provides FT backwards compatibility in the
                 # case where a DurableTrainable is not provided.
-                logger.warning("Trial %s: Reading checkpoint into memory.",
-                               trial)
-                data_dict = TrainableUtil.pickle_checkpoint(value)
+                logger.debug("Trial %s: Reading checkpoint into memory", trial)
+                obj = TrainableUtil.checkpoint_to_object(value)
                 with self._change_working_directory(trial):
-                    remote = trial.runner.restore_from_object.remote(data_dict)
+                    remote = trial.runner.restore_from_object.remote(obj)
             else:
                 raise AbortTrialExecution(
                     "Pass in `sync_on_checkpoint=True` for driver-based trial"
                     "restoration. Pass in an `upload_dir` and a Trainable "
                     "extending `DurableTrainable` for remote storage-based "
                     "restoration")
-            self._running[remote] = trial
-            trial.restoring_from = checkpoint
+
+            if block:
+                ray.get(remote)
+            else:
+                self._running[remote] = trial
+                trial.restoring_from = checkpoint
 
     def export_trial_if_needed(self, trial):
         """Exports model of this trial based on trial.export_formats.

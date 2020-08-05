@@ -1,6 +1,7 @@
-#include "queue_handler.h"
+#include "queue/queue_handler.h"
+
+#include "queue/utils.h"
 #include "util/streaming_util.h"
-#include "utils.h"
 
 namespace ray {
 namespace streaming {
@@ -11,11 +12,6 @@ std::shared_ptr<UpstreamQueueMessageHandler>
     UpstreamQueueMessageHandler::upstream_handler_ = nullptr;
 std::shared_ptr<DownstreamQueueMessageHandler>
     DownstreamQueueMessageHandler::downstream_handler_ = nullptr;
-
-RayFunction UpstreamQueueMessageHandler::peer_sync_function_;
-RayFunction UpstreamQueueMessageHandler::peer_async_function_;
-RayFunction DownstreamQueueMessageHandler::peer_sync_function_;
-RayFunction DownstreamQueueMessageHandler::peer_async_function_;
 
 std::shared_ptr<Message> QueueMessageHandler::ParseMessage(
     std::shared_ptr<LocalMemoryBuffer> buffer) {
@@ -83,10 +79,11 @@ std::shared_ptr<Transport> QueueMessageHandler::GetOutTransport(
 }
 
 void QueueMessageHandler::SetPeerActorID(const ObjectID &queue_id,
-                                         const ActorID &actor_id) {
+                                         const ActorID &actor_id, RayFunction &async_func,
+                                         RayFunction &sync_func) {
   actors_.emplace(queue_id, actor_id);
-  out_transports_.emplace(queue_id,
-                          std::make_shared<ray::streaming::Transport>(actor_id));
+  out_transports_.emplace(queue_id, std::make_shared<ray::streaming::Transport>(
+                                        actor_id, async_func, sync_func));
 }
 
 ActorID QueueMessageHandler::GetPeerActorID(const ObjectID &queue_id) {
@@ -164,8 +161,7 @@ bool UpstreamQueueMessageHandler::CheckQueueSync(const ObjectID &queue_id) {
   auto transport_it = GetOutTransport(queue_id);
   STREAMING_CHECK(transport_it != nullptr);
   std::shared_ptr<LocalMemoryBuffer> result_buffer = transport_it->SendForResultWithRetry(
-      std::move(buffer), DownstreamQueueMessageHandler::peer_sync_function_, 10,
-      COMMON_SYNC_CALL_TIMEOUTT_MS);
+      std::move(buffer), 10, COMMON_SYNC_CALL_TIMEOUTT_MS);
   if (result_buffer == nullptr) {
     return false;
   }

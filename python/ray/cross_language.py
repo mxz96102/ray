@@ -68,7 +68,10 @@ def java_function(class_name, function_name):
         None,  # resources,
         None,  # num_return_vals,
         None,  # max_calls,
-        None)  # max_retries)
+        None,  # max_retries
+        placement_group_id=None,
+        # TODO(ekl) set default to -1 once we support -1 as "any index"
+        placement_group_bundle_index=0)
 
 
 def java_actor_class(class_name):
@@ -76,7 +79,8 @@ def java_actor_class(class_name):
     return ActorClass._ray_from_function_descriptor(
         Language.JAVA,
         JavaFunctionDescriptor(class_name, "<init>", ""),
-        0,  # max_reconstructions,
+        0,  # max_restarts,
+        0,  # max_task_retries,
         None,  # num_cpus,
         None,  # num_gpus,
         None,  # memory,

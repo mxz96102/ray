@@ -1,11 +1,11 @@
-#ifndef RAY_COMMON_TASK_SCHEDULING_RESOURCES_H
-#define RAY_COMMON_TASK_SCHEDULING_RESOURCES_H
+#pragma once
 
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
+#include "ray/common/id.h"
 #include "ray/raylet/format/node_manager_generated.h"
 
 namespace ray {
@@ -67,6 +67,11 @@ class FractionalResourceQuantity {
 /// GPUs, and custom labels.
 class ResourceSet {
  public:
+  static std::shared_ptr<ResourceSet> Nil() {
+    static auto nil = std::make_shared<ResourceSet>();
+    return nil;
+  }
+
   /// \brief empty ResourceSet constructor.
   ResourceSet();
 
@@ -142,6 +147,24 @@ class ResourceSet {
   /// \param other: The other resource set to add.
   /// \return Void.
   void AddResources(const ResourceSet &other);
+
+  /// \brief Aggregate resources from the other set into this set, adding any missing
+  /// resource labels to this set.
+  ///
+  /// \param bundle_id: The placement group id.
+  /// \param bundle_index: The index of the bundle.
+  /// \param other: The other resource set to add.
+  /// \return Void.
+  void AddBundleResources(const PlacementGroupID &bundle_id, const int bundle_index,
+                          const ResourceSet &other);
+
+  /// \brief Return back all the bundle resource. Changing the resource name and adding
+  /// any missing resource labels to this set.
+  ///
+  /// \param bundle_id: The placement group id.
+  /// \param bundle_index: The index of the bundle.
+  /// \return Void.
+  void ReturnBundleResources(const PlacementGroupID &bundle_id, const int bundle_index);
 
   /// \brief Subtract a set of resources from the current set of resources and
   /// check that the post-subtraction result nonnegative. Assumes other
@@ -399,6 +422,17 @@ class ResourceIdSet {
   /// \param capacity capacity of the resource being added
   void AddOrUpdateResource(const std::string &resource_name, int64_t capacity);
 
+  /// \brief  Add a Bundle resource in the ResourceIdSet.
+  ///
+  /// \param resource_name the name of the resource to create/update
+  /// \param resource_ids resource_ids of the resource being added
+  void AddBundleResource(const std::string &resource_name, ResourceIds &resource_ids);
+
+  /// \brief  remove a Bundle resource in the ResourceIdSet.
+  ///
+  /// \param resource_name the name of the resource to remove.
+
+  void CancelResourceReserve(const std::string &resource_name);
   /// \brief Deletes a resource in the ResourceIdSet. This does not raise an exception,
   /// just deletes the resource. Tasks with acquired resources keep running.
   ///
@@ -473,18 +507,27 @@ class SchedulingResources {
   /// \return Void.
   void SetAvailableResources(ResourceSet &&newset);
 
+  /// \brief Request the total resources capacity.
+  ///
+  /// \return Immutable set of resources with currently total capacity.
   const ResourceSet &GetTotalResources() const;
+
+  /// \brief Overwrite total resource capacity with the specified resource set.
+  ///
+  /// \param newset: The set of resources that replaces total resource capacity.
+  /// \return Void.
+  void SetTotalResources(ResourceSet &&newset);
+
+  /// \brief Request the resource load information.
+  ///
+  /// \return Immutable set of resources describing the load information.
+  const ResourceSet &GetLoadResources() const;
 
   /// \brief Overwrite information about resource load with new resource load set.
   ///
   /// \param newset: The set of resources that replaces resource load information.
   /// \return Void.
   void SetLoadResources(ResourceSet &&newset);
-
-  /// \brief Request the resource load information.
-  ///
-  /// \return Immutable set of resources describing the load information.
-  const ResourceSet &GetLoadResources() const;
 
   /// \brief Release the amount of resources specified.
   ///
@@ -510,6 +553,18 @@ class SchedulingResources {
   /// \param capacity: New capacity of the resource.
   /// \return Void.
   void UpdateResourceCapacity(const std::string &resource_name, int64_t capacity);
+
+  /// \brief Update total, available and load resources with the ResourceIds.
+  /// Create if not exists.
+  /// \param resource_name: Name of the resource to be modified
+  /// \param resource_set: New resource_set of the resource.
+  void UpdateBundleResource(const PlacementGroupID &group, const int bundle_index,
+                            const ResourceSet &resource_set);
+
+  /// \brief delete total, available and load resources with the ResourceIds.
+  /// Create if not exists.
+  /// \param resource_name: Name of the resource to be deleted
+  void ReturnBundleResource(const PlacementGroupID &group, const int bundle_index);
 
   /// \brief Delete resource from total, available and load resources.
   ///
@@ -541,5 +596,3 @@ struct hash<ray::ResourceSet> {
   }
 };
 }  // namespace std
-
-#endif  // RAY_COMMON_TASK_SCHEDULING_RESOURCES_H

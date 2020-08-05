@@ -41,10 +41,12 @@ class MockWorker {
         raylet_socket,       // raylet_socket
         JobID::FromInt(1),   // job_id
         gcs_options,         // gcs_options
+        true,                // enable_logging
         "",                  // log_dir
         true,                // install_failure_signal_handler
         "127.0.0.1",         // node_ip_address
         node_manager_port,   // node_manager_port
+        "127.0.0.1",         // raylet_ip_address
         "",                  // driver_name
         "",                  // stdout_file
         "",                  // stderr_file
@@ -53,6 +55,7 @@ class MockWorker {
         nullptr,        // check_signals
         nullptr,        // gc_collect
         nullptr,        // get_lang_stack
+        nullptr,        // kill_main
         true,           // ref_counting_enabled
         false,          // is_local_mode
         1,              // num_workers

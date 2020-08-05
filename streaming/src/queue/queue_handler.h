@@ -1,12 +1,11 @@
-#ifndef _QUEUE_SERVICE_H_
-#define _QUEUE_SERVICE_H_
+#pragma once
 
 #include <boost/asio.hpp>
 #include <boost/bind.hpp>
 #include <boost/thread.hpp>
 #include <thread>
 
-#include "queue.h"
+#include "queue/queue.h"
 #include "util/streaming_logging.h"
 
 namespace ray {
@@ -62,7 +61,8 @@ class QueueMessageHandler {
   /// downstream queue with same queue_id, and vice versa.
   /// \param[in] queue_id queue id of current queue.
   /// \param[in] actor_id actor_id actor id of corresponded peer actor.
-  void SetPeerActorID(const ObjectID &queue_id, const ActorID &actor_id);
+  void SetPeerActorID(const ObjectID &queue_id, const ActorID &actor_id,
+                      RayFunction &async_func, RayFunction &sync_func);
 
   /// Obtain the actor id of the peer actor specified by queue_id.
   /// \return actor id
@@ -133,9 +133,6 @@ class UpstreamQueueMessageHandler : public QueueMessageHandler {
       const ActorID &actor_id);
   static std::shared_ptr<UpstreamQueueMessageHandler> GetService();
 
-  static RayFunction peer_sync_function_;
-  static RayFunction peer_async_function_;
-
  private:
   bool CheckQueueSync(const ObjectID &queue_ids);
 
@@ -170,8 +167,6 @@ class DownstreamQueueMessageHandler : public QueueMessageHandler {
   static std::shared_ptr<DownstreamQueueMessageHandler> CreateService(
       const ActorID &actor_id);
   static std::shared_ptr<DownstreamQueueMessageHandler> GetService();
-  static RayFunction peer_sync_function_;
-  static RayFunction peer_async_function_;
 
  private:
   std::unordered_map<ObjectID, std::shared_ptr<streaming::ReaderQueue>>
@@ -181,4 +176,3 @@ class DownstreamQueueMessageHandler : public QueueMessageHandler {
 
 }  // namespace streaming
 }  // namespace ray
-#endif

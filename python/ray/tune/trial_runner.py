@@ -17,7 +17,7 @@ from ray.tune.result import (TIME_THIS_ITER_S, RESULT_DUPLICATE,
 from ray.tune.syncer import get_cloud_syncer
 from ray.tune.trial import Checkpoint, Trial
 from ray.tune.schedulers import FIFOScheduler, TrialScheduler
-from ray.tune.suggest import BasicVariantGenerator
+from ray.tune.suggest import BasicVariantGenerator, Searcher
 from ray.tune.utils import warn_if_slow, flatten_dict
 from ray.tune.web_server import TuneServer
 from ray.utils import binary_to_hex, hex_to_binary
@@ -225,6 +225,7 @@ class TrialRunner:
             #  which may also contain trial checkpoints. We should selectively
             #  sync the necessary files instead.
             self._syncer.sync_down_if_needed()
+            self._syncer.wait()
 
             if not self.checkpoint_exists(self._local_checkpoint_dir):
                 raise ValueError("Called resume when no checkpoint exists "
@@ -251,6 +252,9 @@ class TrialRunner:
         Overwrites the current session checkpoint, which starts when self
         is instantiated. Throttle depends on self._checkpoint_period.
 
+        Also automatically saves the search algorithm to the local
+        checkpoint dir.
+
         Args:
             force (bool): Forces a checkpoint despite checkpoint_period.
         """
@@ -275,7 +279,10 @@ class TrialRunner:
         with open(tmp_file_name, "w") as f:
             json.dump(runner_state, f, indent=2, cls=_TuneFunctionEncoder)
 
-        os.rename(tmp_file_name, self.checkpoint_file)
+        os.replace(tmp_file_name, self.checkpoint_file)
+
+        Searcher.save_to_dir(self._search_alg, self._local_checkpoint_dir)
+
         if force:
             self._syncer.sync_up()
         else:
@@ -292,7 +299,6 @@ class TrialRunner:
         with open(newest_ckpt_path, "r") as f:
             runner_state = json.load(f, cls=_TuneFunctionDecoder)
             self.checkpoint_file = newest_ckpt_path
-
         logger.warning("".join([
             "Attempting to resume experiment from {}. ".format(
                 self._local_checkpoint_dir), "This feature is experimental, "
@@ -384,10 +390,14 @@ class TrialRunner:
         self.trial_executor.try_checkpoint_metadata(trial)
 
     def debug_string(self, delim="\n"):
+        result_keys = [
+            list(t.last_result) for t in self.get_trials() if t.last_result
+        ]
+        metrics = set().union(*result_keys)
         messages = [
             self._scheduler_alg.debug_string(),
             self.trial_executor.debug_string(),
-            trial_progress_str(self.get_trials()),
+            trial_progress_str(self.get_trials(), metrics),
         ]
         return delim.join(messages)
 
@@ -467,6 +477,7 @@ class TrialRunner:
             result = self.trial_executor.fetch_result(trial)
 
             is_duplicate = RESULT_DUPLICATE in result
+            force_checkpoint = result.get(SHOULD_CHECKPOINT, False)
             # TrialScheduler and SearchAlgorithm still receive a
             # notification because there may be special handling for
             # the `on_trial_complete` hook.
@@ -495,9 +506,7 @@ class TrialRunner:
                 if decision == TrialScheduler.STOP:
                     with warn_if_slow("search_alg.on_trial_complete"):
                         self._search_alg.on_trial_complete(
-                            trial.trial_id,
-                            result=flat_result,
-                            early_terminated=True)
+                            trial.trial_id, result=flat_result)
 
             if not is_duplicate:
                 trial.update_last_result(
@@ -507,8 +516,7 @@ class TrialRunner:
             # the scheduler decision is STOP or PAUSE. Note that
             # PAUSE only checkpoints to memory and does not update
             # the global checkpoint state.
-            self._checkpoint_trial_if_needed(
-                trial, force=result.get(SHOULD_CHECKPOINT, False))
+            self._checkpoint_trial_if_needed(trial, force=force_checkpoint)
 
             if trial.is_saving:
                 # Cache decision to execute on after the save is processed.
@@ -711,7 +719,7 @@ class TrialRunner:
 
         Trials may be stopped at any time. If trial is in state PENDING
         or PAUSED, calls `on_trial_remove`  for scheduler and
-        `on_trial_complete(..., early_terminated=True) for search_alg.
+        `on_trial_complete() for search_alg.
         Otherwise waits for result for the trial and calls
         `on_trial_complete` for scheduler and search_alg if RUNNING.
         """
@@ -722,8 +730,7 @@ class TrialRunner:
             return
         elif trial.status in [Trial.PENDING, Trial.PAUSED]:
             self._scheduler_alg.on_trial_remove(self, trial)
-            self._search_alg.on_trial_complete(
-                trial.trial_id, early_terminated=True)
+            self._search_alg.on_trial_complete(trial.trial_id)
         elif trial.status is Trial.RUNNING:
             try:
                 result = self.trial_executor.fetch_result(trial)

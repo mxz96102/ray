@@ -3,11 +3,11 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import json
 import os
 import re
 import subprocess
 import sys
-from functools import partial
 from pprint import pformat
 
 
@@ -25,7 +25,7 @@ def list_changed_files(commit_range):
         list: List of changed files within the commit range
     """
 
-    command = ["git", "diff", "--name-only", commit_range]
+    command = ["git", "diff", "--name-only", commit_range, "--"]
     out = subprocess.check_output(command)
     return [s.strip() for s in out.decode().splitlines() if s is not None]
 
@@ -33,6 +33,7 @@ def list_changed_files(commit_range):
 if __name__ == "__main__":
 
     RAY_CI_TUNE_AFFECTED = 0
+    RAY_CI_SGD_AFFECTED = 0
     RAY_CI_ONLY_RLLIB_AFFECTED = 0  # Whether only RLlib is affected.
     RAY_CI_RLLIB_AFFECTED = 0  # Whether RLlib minimal tests should be run.
     RAY_CI_RLLIB_FULL_AFFECTED = 0  # Whether full RLlib tests should be run.
@@ -44,10 +45,22 @@ if __name__ == "__main__":
     RAY_CI_STREAMING_CPP_AFFECTED = 0
     RAY_CI_STREAMING_PYTHON_AFFECTED = 0
     RAY_CI_STREAMING_JAVA_AFFECTED = 0
+    RAY_CI_DASHBOARD_AFFECTED = 0
+    RAY_CI_DOCKER_AFFECTED = 0
 
-    if os.environ["TRAVIS_EVENT_TYPE"] == "pull_request":
+    event_type = None
+    for key in ["GITHUB_EVENT_NAME", "TRAVIS_EVENT_TYPE"]:
+        event_type = os.getenv(key, event_type)
 
-        files = list_changed_files(os.environ["TRAVIS_COMMIT_RANGE"])
+    if event_type == "pull_request":
+
+        commit_range = os.getenv("TRAVIS_COMMIT_RANGE")
+        if commit_range is None:
+            with open(os.environ["GITHUB_EVENT_PATH"], "rb") as f:
+                event = json.loads(f.read())
+            base = event["pull_request"]["base"]["sha"]
+            commit_range = "{}...{}".format(base, event.get("after", ""))
+        files = list_changed_files(commit_range)
 
         print(pformat(files), file=sys.stderr)
 
@@ -62,6 +75,10 @@ if __name__ == "__main__":
                 RAY_CI_RLLIB_FULL_AFFECTED = 1
                 RAY_CI_LINUX_WHEELS_AFFECTED = 1
                 RAY_CI_MACOS_WHEELS_AFFECTED = 1
+            elif changed_file.startswith("python/ray/util/sgd"):
+                RAY_CI_SGD_AFFECTED = 1
+                RAY_CI_LINUX_WHEELS_AFFECTED = 1
+                RAY_CI_MACOS_WHEELS_AFFECTED = 1
             elif re.match("^(python/ray/)?rllib/", changed_file):
                 RAY_CI_RLLIB_AFFECTED = 1
                 RAY_CI_RLLIB_FULL_AFFECTED = 1
@@ -71,17 +88,23 @@ if __name__ == "__main__":
                 RAY_CI_SERVE_AFFECTED = 1
                 RAY_CI_LINUX_WHEELS_AFFECTED = 1
                 RAY_CI_MACOS_WHEELS_AFFECTED = 1
+            elif changed_file.startswith("python/ray/dashboard"):
+                RAY_CI_DASHBOARD_AFFECTED = 1
             elif changed_file.startswith("python/"):
                 RAY_CI_TUNE_AFFECTED = 1
+                RAY_CI_SGD_AFFECTED = 1
                 RAY_CI_RLLIB_AFFECTED = 1
                 RAY_CI_SERVE_AFFECTED = 1
                 RAY_CI_PYTHON_AFFECTED = 1
+                RAY_CI_DASHBOARD_AFFECTED = 1
                 RAY_CI_LINUX_WHEELS_AFFECTED = 1
                 RAY_CI_MACOS_WHEELS_AFFECTED = 1
                 RAY_CI_STREAMING_PYTHON_AFFECTED = 1
             elif changed_file.startswith("java/"):
                 RAY_CI_JAVA_AFFECTED = 1
                 RAY_CI_STREAMING_JAVA_AFFECTED = 1
+            elif changed_file.startswith("docker/"):
+                RAY_CI_DOCKER_AFFECTED = 1
             elif any(
                     changed_file.startswith(prefix)
                     for prefix in skip_prefix_list):
@@ -89,6 +112,7 @@ if __name__ == "__main__":
                 pass
             elif changed_file.startswith("src/"):
                 RAY_CI_TUNE_AFFECTED = 1
+                RAY_CI_SGD_AFFECTED = 1
                 RAY_CI_RLLIB_AFFECTED = 1
                 RAY_CI_SERVE_AFFECTED = 1
                 RAY_CI_JAVA_AFFECTED = 1
@@ -98,6 +122,7 @@ if __name__ == "__main__":
                 RAY_CI_STREAMING_CPP_AFFECTED = 1
                 RAY_CI_STREAMING_PYTHON_AFFECTED = 1
                 RAY_CI_STREAMING_JAVA_AFFECTED = 1
+                RAY_CI_DASHBOARD_AFFECTED = 1
             elif changed_file.startswith("streaming/src"):
                 RAY_CI_STREAMING_CPP_AFFECTED = 1
                 RAY_CI_STREAMING_PYTHON_AFFECTED = 1
@@ -108,6 +133,7 @@ if __name__ == "__main__":
                 RAY_CI_STREAMING_JAVA_AFFECTED = 1
             else:
                 RAY_CI_TUNE_AFFECTED = 1
+                RAY_CI_SGD_AFFECTED = 1
                 RAY_CI_RLLIB_AFFECTED = 1
                 RAY_CI_SERVE_AFFECTED = 1
                 RAY_CI_JAVA_AFFECTED = 1
@@ -119,6 +145,7 @@ if __name__ == "__main__":
                 RAY_CI_STREAMING_JAVA_AFFECTED = 1
     else:
         RAY_CI_TUNE_AFFECTED = 1
+        RAY_CI_SGD_AFFECTED = 1
         RAY_CI_RLLIB_AFFECTED = 1
         RAY_CI_RLLIB_FULL_AFFECTED = 1
         RAY_CI_SERVE_AFFECTED = 1
@@ -134,29 +161,27 @@ if __name__ == "__main__":
             not RAY_CI_JAVA_AFFECTED and not RAY_CI_PYTHON_AFFECTED and not \
             RAY_CI_STREAMING_CPP_AFFECTED and \
             not RAY_CI_STREAMING_PYTHON_AFFECTED and \
-            not RAY_CI_STREAMING_JAVA_AFFECTED:
+            not RAY_CI_STREAMING_JAVA_AFFECTED and \
+            not RAY_CI_SGD_AFFECTED:
         RAY_CI_ONLY_RLLIB_AFFECTED = 1
 
     # Log the modified environment variables visible in console.
-    for output_stream in [sys.stdout, sys.stderr]:
-        _print = partial(print, file=output_stream)
-        _print("export RAY_CI_TUNE_AFFECTED={}".format(RAY_CI_TUNE_AFFECTED))
-        _print("export RAY_CI_ONLY_RLLIB_AFFECTED={}"
-               .format(RAY_CI_ONLY_RLLIB_AFFECTED))
-        _print("export RAY_CI_RLLIB_AFFECTED={}".format(RAY_CI_RLLIB_AFFECTED))
-        _print("export RAY_CI_RLLIB_FULL_AFFECTED={}".format(
-            RAY_CI_RLLIB_FULL_AFFECTED))
-        _print("export RAY_CI_SERVE_AFFECTED={}".format(RAY_CI_SERVE_AFFECTED))
-        _print("export RAY_CI_JAVA_AFFECTED={}".format(RAY_CI_JAVA_AFFECTED))
-        _print(
-            "export RAY_CI_PYTHON_AFFECTED={}".format(RAY_CI_PYTHON_AFFECTED))
-        _print("export RAY_CI_LINUX_WHEELS_AFFECTED={}"
-               .format(RAY_CI_LINUX_WHEELS_AFFECTED))
-        _print("export RAY_CI_MACOS_WHEELS_AFFECTED={}"
-               .format(RAY_CI_MACOS_WHEELS_AFFECTED))
-        _print("export RAY_CI_STREAMING_CPP_AFFECTED={}"
-               .format(RAY_CI_STREAMING_CPP_AFFECTED))
-        _print("export RAY_CI_STREAMING_PYTHON_AFFECTED={}"
-               .format(RAY_CI_STREAMING_PYTHON_AFFECTED))
-        _print("export RAY_CI_STREAMING_JAVA_AFFECTED={}"
-               .format(RAY_CI_STREAMING_JAVA_AFFECTED))
+    print(" ".join([
+        "RAY_CI_TUNE_AFFECTED={}".format(RAY_CI_TUNE_AFFECTED),
+        "RAY_CI_SGD_AFFECTED={}".format(RAY_CI_SGD_AFFECTED),
+        "RAY_CI_ONLY_RLLIB_AFFECTED={}".format(RAY_CI_ONLY_RLLIB_AFFECTED),
+        "RAY_CI_RLLIB_AFFECTED={}".format(RAY_CI_RLLIB_AFFECTED),
+        "RAY_CI_RLLIB_FULL_AFFECTED={}".format(RAY_CI_RLLIB_FULL_AFFECTED),
+        "RAY_CI_SERVE_AFFECTED={}".format(RAY_CI_SERVE_AFFECTED),
+        "RAY_CI_DASHBOARD_AFFECTED={}".format(RAY_CI_DASHBOARD_AFFECTED),
+        "RAY_CI_JAVA_AFFECTED={}".format(RAY_CI_JAVA_AFFECTED),
+        "RAY_CI_PYTHON_AFFECTED={}".format(RAY_CI_PYTHON_AFFECTED),
+        "RAY_CI_LINUX_WHEELS_AFFECTED={}".format(RAY_CI_LINUX_WHEELS_AFFECTED),
+        "RAY_CI_MACOS_WHEELS_AFFECTED={}".format(RAY_CI_MACOS_WHEELS_AFFECTED),
+        "RAY_CI_STREAMING_CPP_AFFECTED={}".format(
+            RAY_CI_STREAMING_CPP_AFFECTED),
+        "RAY_CI_STREAMING_PYTHON_AFFECTED={}".format(
+            RAY_CI_STREAMING_PYTHON_AFFECTED),
+        "RAY_CI_STREAMING_JAVA_AFFECTED={}".format(
+            RAY_CI_STREAMING_JAVA_AFFECTED),
+    ]))

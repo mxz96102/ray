@@ -12,8 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef RAY_GCS_REDIS_GCS_CLIENT_H
-#define RAY_GCS_REDIS_GCS_CLIENT_H
+#pragma once
 
 #include <map>
 #include <string>
@@ -81,6 +80,8 @@ class RAY_EXPORT RedisGcsClient : public GcsClient {
     return redis_client_->GetPrimaryContext();
   }
 
+  std::shared_ptr<RedisClient> GetRedisClient() const { return redis_client_; }
+
   /// The following xxx_table methods implement the Accessor interfaces.
   /// Implements the Actors() interface.
   LogBasedActorTable &log_based_actor_table();
@@ -97,23 +98,20 @@ class RAY_EXPORT RedisGcsClient : public GcsClient {
   HeartbeatBatchTable &heartbeat_batch_table();
   DynamicResourceTable &resource_table();
   /// Implements the Tasks() interface.
-  raylet::TaskTable &raylet_task_table();
+  virtual raylet::TaskTable &raylet_task_table();
   TaskLeaseTable &task_lease_table();
   TaskReconstructionLog &task_reconstruction_log();
-  /// Implements the Errors() interface.
-  // TODO: Some API for getting the error on the driver
-  ErrorTable &error_table();
   /// Implements the Stats() interface.
   ProfileTable &profile_table();
   /// Implements the Workers() interface.
-  WorkerFailureTable &worker_failure_table();
+  WorkerTable &worker_table();
 
  private:
   // GCS command type. If CommandType::kChain, chain-replicated versions of the tables
   // might be used, if available.
   CommandType command_type_{CommandType::kUnknown};
 
-  std::unique_ptr<RedisClient> redis_client_;
+  std::shared_ptr<RedisClient> redis_client_;
 
   std::unique_ptr<ObjectTable> object_table_;
   std::unique_ptr<raylet::TaskTable> raylet_task_table_;
@@ -123,18 +121,15 @@ class RAY_EXPORT RedisGcsClient : public GcsClient {
   std::unique_ptr<TaskLeaseTable> task_lease_table_;
   std::unique_ptr<HeartbeatTable> heartbeat_table_;
   std::unique_ptr<HeartbeatBatchTable> heartbeat_batch_table_;
-  std::unique_ptr<ErrorTable> error_table_;
   std::unique_ptr<ProfileTable> profile_table_;
   std::unique_ptr<ClientTable> client_table_;
   std::unique_ptr<ActorCheckpointTable> actor_checkpoint_table_;
   std::unique_ptr<ActorCheckpointIdTable> actor_checkpoint_id_table_;
   std::unique_ptr<DynamicResourceTable> resource_table_;
-  std::unique_ptr<WorkerFailureTable> worker_failure_table_;
+  std::unique_ptr<WorkerTable> worker_table_;
   std::unique_ptr<JobTable> job_table_;
 };
 
 }  // namespace gcs
 
 }  // namespace ray
-
-#endif  // RAY_GCS_REDIS_GCS_CLIENT_H

@@ -1,5 +1,4 @@
-#ifndef RAY_CORE_WORKER_MEMORY_STORE_H
-#define RAY_CORE_WORKER_MEMORY_STORE_H
+#pragma once
 
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
@@ -13,6 +12,7 @@
 namespace ray {
 
 struct MemoryStoreStats {
+  int32_t num_in_plasma = 0;
   int32_t num_local_objects = 0;
   int64_t used_object_store_memory = 0;
 };
@@ -176,5 +176,3 @@ class CoreWorkerMemoryStore {
 };
 
 }  // namespace ray
-
-#endif  // RAY_CORE_WORKER_MEMORY_STORE_H
