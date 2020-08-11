@@ -6,7 +6,8 @@ import { ActorEnum } from '../type/actor';
 
 const colorMap = {
   node: {
-    RUNNING: green[500],
+    ALIVE: green[500],
+    DEAD: red[500],
   },
   actor: {
     [ActorEnum.ALIVE]: green[500],

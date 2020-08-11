@@ -3,14 +3,14 @@ import React, { PropsWithChildren } from 'react';
 
 const useStyle = makeStyles((theme) => ({
   container: {
-    background: "linear-gradient(to right, #12c2e988, #c471ed88, #f64f59aa)",
+    background: 'linear-gradient(45deg, #21CBF3 30%, #2196F3 90%)',
+    boxShadow: '0px 2px 1px -1px rgba(33, 203, 243,0.2), 0px 1px 1px 0px rgba(33, 203, 243,0.14), 0px 1px 3px 0px rgba(33, 203, 243,0.12)',
     padding: '0 12px',
     height: 24,
     lineHeight: '24px',
     position: "relative",
-    border: '#999999aa solid 1px',
     boxSizing: 'content-box',
-    transition: '0.5s width',
+    borderRadius: 4,
   },
   displayBar: {
     background: theme.palette.background.paper,
@@ -18,8 +18,13 @@ const useStyle = makeStyles((theme) => ({
     right: 0,
     height: 24,
     transition: '0.5s width',
+    borderRadius: 4,
+    borderTopLeftRadius: 0,
+    borderBottomLeftRadius: 0,
+    border: '2px solid transparent',
+    boxSizing: 'border-box',
   },
-  text: { zIndex: 2, position: 'relative', color: theme.palette.text.secondary, width: '100%', textAlign: 'center' },
+  text: { fontSize: 12, zIndex: 2, position: 'relative', color: theme.palette.text.secondary, width: '100%', textAlign: 'center' },
 }))
 
 const PercentageBar = (props: PropsWithChildren<{num: number, total: number}>) => {

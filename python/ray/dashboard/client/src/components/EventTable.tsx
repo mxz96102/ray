@@ -1,11 +1,11 @@
-import { Chip, InputAdornment, makeStyles, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField } from '@material-ui/core';
+import { Chip, InputAdornment, makeStyles, TextField } from '@material-ui/core';
 import { SearchOutlined } from '@material-ui/icons';
 import moment from 'moment';
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { getEvents, getGlobalEvents } from '../service/event';
 import { Event } from '../type/event';
-import { longTextCut, useFilter } from './WorkerTable';
+import { useFilter } from './WorkerTable';
 
 type EventTableProps = {
   job_id?: string,
@@ -27,6 +27,21 @@ const useStyles = makeStyles(theme => ({
   search: {
     margin: theme.spacing(1),
   },
+  infokv: {
+    margin: theme.spacing(1),
+  },
+  li: {
+    borderBottom: `1px solid ${theme.palette.text.hint}`,
+    color: theme.palette.text.secondary,
+    fontSize: 12,
+  },
+  code: {
+    wordBreak: 'break-all',
+    whiteSpace: 'pre-line',
+    margin: 12,
+    fontSize: 14,
+    color: theme.palette.text.primary,
+  },
 }));
 
 const useEventTable = (props: EventTableProps) => {
@@ -41,12 +56,12 @@ const useEventTable = (props: EventTableProps) => {
         const rsp = await getEvents(job_id);
         if (rsp?.data?.data?.events) {
           setEvents(rsp.data.data.events)
-        } 
+        }
       } else {
         const rsp = await getGlobalEvents();
         if (rsp?.data?.data?.events?.global) {
           setEvents(rsp.data.data.events.global)
-        } 
+        }
       }
 
       timeout = setTimeout(getEvent, 8000);
@@ -63,106 +78,80 @@ const useEventTable = (props: EventTableProps) => {
   }
 }
 
-const columns = ['Label', 'Msg', 'Time', 'Source Type', 'Hostname', 'Pid', 'Job Id', 'Event ID', 'Node Id']
-
 const EventTable = (props: EventTableProps) => {
   const classes = useStyles();
-  const {events, changeFilter} = useEventTable(props);
+  const { events, changeFilter } = useEventTable(props);
 
-  return <TableContainer>
+  return <div>
     <div>
-    <TextField className={classes.search} label="Label" InputProps={{
-    onChange: ({ target: { value } }) => {
-      changeFilter('label', value.trim())
-    },
-    endAdornment: (
-      <InputAdornment position="end">
-        <SearchOutlined />
-      </InputAdornment>
-    ),
-  }} />
+      <TextField className={classes.search} label="Label" InputProps={{
+        onChange: ({ target: { value } }) => {
+          changeFilter('label', value.trim())
+        },
+        endAdornment: (
+          <InputAdornment position="end">
+            <SearchOutlined />
+          </InputAdornment>
+        ),
+      }} />
       <TextField className={classes.search} label="Msg" InputProps={{
-    onChange: ({ target: { value } }) => {
-      changeFilter('message', value.trim())
-    },
-    endAdornment: (
-      <InputAdornment position="end">
-        <SearchOutlined />
-      </InputAdornment>
-    ),
-  }} />
-  <TextField className={classes.search} label="Hostname" InputProps={{
-    onChange: ({ target: { value } }) => {
-      changeFilter('hostname', value.trim())
-    },
-    endAdornment: (
-      <InputAdornment position="end">
-        <SearchOutlined />
-      </InputAdornment>
-    ),
-  }} />
-  <TextField className={classes.search} label="Job Id" InputProps={{
-    onChange: ({ target: { value } }) => {
-      changeFilter('jobId', value.trim())
-    },
-    endAdornment: (
-      <InputAdornment position="end">
-        <SearchOutlined />
-      </InputAdornment>
-    ),
-  }} />
-  </div>
-    <Table>
-      <TableHead>
-        <TableRow>
-          {
-            columns.map(col => <TableCell align="center" key={col}>{col}</TableCell>)
-          }
-        </TableRow>
-      </TableHead>
-      <TableBody>
-        {
-          events.map(({ label, message, timestamp, sourceType, sourceHostname, sourcePid, eventId, jobId, nodeId }) => 
-            <TableRow key={eventId}>
-              <TableCell>
-                <Chip label={label} variant="outlined" size="small"/>
-              </TableCell>
-              <TableCell>
-                <pre>
-                  {message}
-                </pre>
-              </TableCell>
-              <TableCell align="center">
-                {moment(parseInt(timestamp, 10) / 1000).format('YYYY-MM-DD HH:mm:ss')}
-              </TableCell>
-              <TableCell>
-                {sourceType}
-              </TableCell>
-              <TableCell align="center">
-                <Link to={`node/${sourceHostname}`}>
-                  {sourceHostname}
-                </Link>
-              </TableCell>
-              <TableCell>
-                {sourcePid}
-              </TableCell>
-              <TableCell>
-              <Link to={`job/${jobId}`}>
+        onChange: ({ target: { value } }) => {
+          changeFilter('message', value.trim())
+        },
+        endAdornment: (
+          <InputAdornment position="end">
+            <SearchOutlined />
+          </InputAdornment>
+        ),
+      }} />
+      <TextField className={classes.search} label="Hostname" InputProps={{
+        onChange: ({ target: { value } }) => {
+          changeFilter('hostname', value.trim())
+        },
+        endAdornment: (
+          <InputAdornment position="end">
+            <SearchOutlined />
+          </InputAdornment>
+        ),
+      }} />
+      <TextField className={classes.search} label="Job Id" InputProps={{
+        onChange: ({ target: { value } }) => {
+          changeFilter('jobId', value.trim())
+        },
+        endAdornment: (
+          <InputAdornment position="end">
+            <SearchOutlined />
+          </InputAdornment>
+        ),
+      }} />
+    </div>
+    <div>
+      {
+        events.map(({ label, message, timestamp, sourceType, sourceHostname, sourcePid, eventId, jobId, nodeId }) =>
+          <article className={classes.li} key={eventId}>
+            <p>
+              <Chip label={label} size="small" /> {moment(parseInt(timestamp, 10) / 1000).format('YYYY-MM-DD HH:mm:ss')}
+            </p>
+            <p>
+              <span className={classes.infokv}>source: {sourceType}</span>
+              <span className={classes.infokv}>hostname: <Link to={`node/${sourceHostname}`}>
+                {sourceHostname}
+              </Link></span>
+              <span className={classes.infokv}>pid: {sourcePid}</span>
+              {jobId && <span className={classes.infokv}>jobId: <Link to={`job/${jobId}`}>
                 {jobId}
-              </Link>
-              </TableCell>
-              <TableCell>
-                {longTextCut(eventId, 10)}
-              </TableCell>
-              <TableCell>
-                {longTextCut(nodeId, 10)}
-              </TableCell>
-            </TableRow>,
-          )
-        }
-      </TableBody>
-    </Table>
-  </TableContainer>
+              </Link></span>}
+              { eventId && <span className={classes.infokv}>eventId: {eventId}</span> }
+              { nodeId && <span className={classes.infokv}>nodeId: {nodeId}</span>}
+            </p>
+            <pre className={classes.code}>
+              {message}
+            </pre>
+          </article>,
+        )
+      }
+    </div>
+  </div>
 }
 
 export default EventTable;

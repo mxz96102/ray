@@ -1,4 +1,4 @@
-import { IconButton, InputAdornment, Table, TableBody, TableCell, TableHead, TableRow, TextField, Tooltip } from '@material-ui/core';
+import { Button, IconButton, InputAdornment, Table, TableBody, TableCell, TableHead, TableRow, TextField, Tooltip } from '@material-ui/core';
 import { KeyboardArrowDown, KeyboardArrowRight, SearchOutlined } from '@material-ui/icons';
 import moment from 'moment';
 import numeral from 'numeral';
@@ -17,9 +17,9 @@ const ExpandableTableRow = ({ children, expandComponent, length, ...otherProps }
 
   if (length < 1) {
     return <TableRow {...otherProps}>
-        <TableCell padding="checkbox"/>
-        {children}
-      </TableRow>
+      <TableCell padding="checkbox" />
+      {children}
+    </TableRow>
   }
 
   return (
@@ -68,11 +68,11 @@ const WorkerDetailTable = ({ actorMap, coreWorkerStats }: { actorMap: { [actorId
           </TableCell>
           <TableCell align="center">
             {
-              taskSpec.functionDescriptor.javaFunctionDescriptor && 
+              taskSpec.functionDescriptor.javaFunctionDescriptor &&
               longTextCut(`${taskSpec.functionDescriptor.javaFunctionDescriptor.className}${taskSpec.functionDescriptor.javaFunctionDescriptor.functionName}${taskSpec.functionDescriptor.javaFunctionDescriptor.signature}`, 60)
             }
             {
-              taskSpec.functionDescriptor.pythonFunctionDescriptor && 
+              taskSpec.functionDescriptor.pythonFunctionDescriptor &&
               longTextCut(`${taskSpec.functionDescriptor.pythonFunctionDescriptor.className}${taskSpec.functionDescriptor.pythonFunctionDescriptor.functionName}${taskSpec.functionDescriptor.pythonFunctionDescriptor.signature}`, 60)
             }
           </TableCell>
@@ -130,52 +130,59 @@ const RayletWorkerTable = ({ workers = [], actorMap }: { workers: Worker[], acto
       </InputAdornment>
     ),
   }} /></div>, <Table>
-    <TableHead>
-      <TableRow>
+      <TableHead>
+        <TableRow>
+          {
+            ['', 'Pid', 'CPU', 'CPU Times (user/system/iowait)', 'Memory (rss/vms/shared/text/lib/data/dirty)', 'CMD Line', 'Create Time', 'Ops'].map(col => <TableCell align="center" key={col}>{col}</TableCell>)
+          }
+        </TableRow>
+      </TableHead>
+      <TableBody>
         {
-          ['', 'Pid', 'CPU', 'CPU Times (user/system/iowait)', 'Memory (rss/vms/shared/text/lib/data/dirty)', 'CMD Line', 'Create Time', 'Log'].map(col => <TableCell align="center" key={col}>{col}</TableCell>)
-        }
-      </TableRow>
-    </TableHead>
-    <TableBody>
-      {
-        workers
-        .filter(filterFunc)
-        .sort((aWorker, bWorker) => {
-          const a = (aWorker.coreWorkerStats || []).filter(e => actorMap[e.actorId]).length || 0;
-          const b = (bWorker.coreWorkerStats || []).filter(e => actorMap[e.actorId]).length || 0;
+          workers
+            .filter(filterFunc)
+            .sort((aWorker, bWorker) => {
+              const a = (aWorker.coreWorkerStats || []).filter(e => actorMap[e.actorId]).length || 0;
+              const b = (bWorker.coreWorkerStats || []).filter(e => actorMap[e.actorId]).length || 0;
 
-          return b - a
-        })
-        .map(({ pid, cpuPercent, cpuTimes, memoryInfo, cmdline, createTime, coreWorkerStats = [] }) =>
-          <ExpandableTableRow expandComponent={
-            <WorkerDetailTable actorMap={actorMap} coreWorkerStats={coreWorkerStats} />
-          } length={(coreWorkerStats || []).filter(e => actorMap[e.actorId]).length} key={pid}>
-            <TableCell align="center">
-              {pid}
-            </TableCell>
-            <TableCell align="center">
-              <PercentageBar num={Number(cpuPercent)} total={100}>
-                {cpuPercent}%
-          </PercentageBar>
-            </TableCell>
-            <TableCell align="center">
-              {cpuTimes?.user}/{cpuTimes?.system}/{cpuTimes?.iowait}
-            </TableCell>
-            <TableCell align="center">
-              {byteFmt(memoryInfo?.rss)}/{byteFmt(memoryInfo?.vms)}/{byteFmt(memoryInfo?.shared)}/{byteFmt(memoryInfo?.text)}/{byteFmt(memoryInfo?.lib)}/{byteFmt(memoryInfo?.data)}/{byteFmt(memoryInfo?.dirty)}
-            </TableCell>
-            <TableCell align="center">
-              {cmdline && longTextCut(cmdline.filter(e => e).join('\n'))}
-            </TableCell>
-            <TableCell align="center">
-              {moment(createTime * 1000).format('YYYY/MM/DD HH:mm:ss')}
-            </TableCell>
-          </ExpandableTableRow>,
-        )
-      }
-    </TableBody>
-  </Table></React.Fragment>
+              return b - a
+            })
+            .map(({ pid, cpuPercent, cpuTimes, memoryInfo, cmdline, createTime, coreWorkerStats = [], language }) =>
+              <ExpandableTableRow expandComponent={
+                <WorkerDetailTable actorMap={actorMap} coreWorkerStats={coreWorkerStats} />
+              } length={(coreWorkerStats || []).filter(e => actorMap[e.actorId]).length} key={pid}>
+                <TableCell align="center">
+                  {pid}
+                </TableCell>
+                <TableCell align="center">
+                  <PercentageBar num={Number(cpuPercent)} total={100}>
+                    {cpuPercent}%
+                  </PercentageBar>
+                </TableCell>
+                <TableCell align="center">
+                  {cpuTimes?.user}/{cpuTimes?.system}/{cpuTimes?.iowait}
+                </TableCell>
+                <TableCell align="center">
+                  {byteFmt(memoryInfo?.rss)}/{byteFmt(memoryInfo?.vms)}/{byteFmt(memoryInfo?.shared)}/{byteFmt(memoryInfo?.text)}/{byteFmt(memoryInfo?.lib)}/{byteFmt(memoryInfo?.data)}/{byteFmt(memoryInfo?.dirty)}
+                </TableCell>
+                <TableCell align="center">
+                  {cmdline && longTextCut(cmdline.filter(e => e).join('\n'))}
+                </TableCell>
+                <TableCell align="center">
+                  {moment(createTime * 1000).format('YYYY/MM/DD HH:mm:ss')}
+                </TableCell>
+                <TableCell align="center">
+                  {language === 'JAVA' && <div><Button onClick={() => {
+                    window.open(`#/cmd/jstack/${coreWorkerStats[0]?.ipAddress}/${pid}`)
+                  }}>jstack</Button> <Button onClick={() => {
+                    window.open(`#/cmd/jmap/${coreWorkerStats[0]?.ipAddress}/${pid}`)
+                  }}>jmap</Button></div>}
+                </TableCell>
+              </ExpandableTableRow>,
+            )
+        }
+      </TableBody>
+    </Table></React.Fragment>
 }
 
 

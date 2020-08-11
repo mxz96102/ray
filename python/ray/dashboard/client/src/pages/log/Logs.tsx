@@ -56,16 +56,16 @@ const useLogs = (props: LogsProps) => {
               setLogs('(null)')
             }
             
-          }
+          },
         ).catch(() => {
           setLogs('Failed to load')
         })
     }
-    , [host, path]
+    , [host, path],
   )
 
   return {
-    log, origin, host, path, el, search, setSearch, theme
+    log, origin, host, path, el, search, setSearch, theme,
   }
 }
 
@@ -108,7 +108,7 @@ export const Logs = (props: LogsProps) => {
           {log.map(
             (e: { [key:string]: string }) => <ListItem key={e.name}>
               <a href={`#/log/${origin ? `${encodeURIComponent(origin)}/` : ''}${encodeURIComponent(e.href)}`}>{e.name}</a>
-            </ListItem>
+            </ListItem>,
           )}
         </List>
       }

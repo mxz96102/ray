@@ -30,5 +30,5 @@ export type Worker = {
   },
   "pid": number,
   "coreWorkerStats": CoreWorkerStats[],
-  "slsUrl": string | { [key:string]: string },
+  "language": string,
 }

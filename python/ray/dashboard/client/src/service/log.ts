@@ -8,11 +8,11 @@ type LogRsp = {
   }
 }
 
-export function getLogs() {
+export const getLogs = () => {
   return axios.get<LogRsp>('logs');
 }
 
-export async function getLogDetail(url: string) {
+export const getLogDetail = async (url: string) => {
   if (window.location.pathname !== '/') {
     const pathArr = window.location.pathname.split('/');
     if (pathArr.length > 1) {

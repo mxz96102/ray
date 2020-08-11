@@ -1,7 +1,7 @@
 import { CssBaseline } from "@material-ui/core";
+import { ThemeProvider } from '@material-ui/core/styles';
 import React, { useState } from "react";
 import { Provider } from "react-redux";
-import { ThemeProvider } from '@material-ui/core/styles';
 import { HashRouter, Route } from "react-router-dom";
 import Dashboard from "./pages/dashboard/Dashboard";
 import Events from "./pages/event/Events";

@@ -1,12 +1,12 @@
 import {
   createStyles,
+  Paper,
   Tab,
   Tabs,
   Theme,
   Typography,
-  WithStyles,
   withStyles,
-  Paper,
+  WithStyles,
 } from "@material-ui/core";
 import React from "react";
 import { connect } from "react-redux";
@@ -42,7 +42,7 @@ const styles = (theme: Theme) =>
     },
     paper: {
       padding: theme.spacing(2),
-    }
+    },
   });
 
 const mapStateToProps = (state: StoreState) => ({

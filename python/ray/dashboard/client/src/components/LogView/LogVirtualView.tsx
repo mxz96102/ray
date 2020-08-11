@@ -7,7 +7,7 @@ import './index.css';
 
 const uniqueKeySelector = () => Math.random().toString(16).slice(-8)
 
-function value2react({ type, tagName, properties, children, value = '' }: any, key: string, keywords: string = '') {
+const value2react = ({ type, tagName, properties, children, value = '' }: any, key: string, keywords: string = '') => {
   switch (type) {
     case 'element':
       return React.createElement(tagName, {
@@ -54,7 +54,7 @@ export type LogVirtualViewProps = {
   style?: { [key: string]: string | number },
   listRef?: MutableRefObject<HTMLDivElement | null>,
   onScrollBottom?: (event: Event) => void,
-  revert: boolean
+  revert?: boolean
 }
 
 type HastNode = lowlight.HastNode;
@@ -86,7 +86,7 @@ const LogVirtualView: React.FC<LogVirtualViewProps> = ({ content, width = '100%'
       setLogs(
         originContent
           .map((e, i) => ({ i, origin: e }))
-          .map(e => ({ ...e, value: low.highlight(language, e.origin).value }))
+          .map(e => ({ ...e, value: low.highlight(language, e.origin).value })),
       );
     }, 300);
   }, [content, keywords, language, revert]);
@@ -96,7 +96,7 @@ const LogVirtualView: React.FC<LogVirtualViewProps> = ({ content, width = '100%'
       if (el.current) {
         el.current?.scrollTo((focusLine - 1) * (fontSize + 6))
       }
-    }, [focusLine, fontSize]
+    }, [focusLine, fontSize],
   )
 
   useEffect(
