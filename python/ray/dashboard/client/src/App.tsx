@@ -11,6 +11,7 @@ import Node from "./pages/node";
 import NodeDetail from "./pages/node/NodeDetail";
 import { store } from "./store";
 import { darkTheme, lightTheme } from "./theme";
+import CMDResult from "./pages/cmd/CMDResult";
 
 const RAY_DASHBOARD_THEME_KEY = 'ray-dashboard-theme';
 
@@ -44,6 +45,7 @@ const App = () => {
             <Route component={Events} exact path="/event" />
             <Route render={props => <Logs {...props} theme={theme as 'light' | 'dark'} />} exact path="/log/:host?/:path?" />
             <Route component={NodeDetail} path="/node/:id" />
+            <Route component={CMDResult} path="/cmd/:cmd/:ip/:pid" />
           </BasicLayout>} path="/" />
         </HashRouter>
       </Provider>
