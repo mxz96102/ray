@@ -42,7 +42,6 @@ const App = () => {
           <Route render={props => <BasicLayout {...props} setTheme={setTheme} theme={theme}>
             <Route component={Dashboard} exact path="/" />
             <Route component={Node} exact path="/node" />
-            <Route component={Events} exact path="/event" />
             <Route render={props => <Logs {...props} theme={theme as 'light' | 'dark'} />} exact path="/log/:host?/:path?" />
             <Route component={NodeDetail} path="/node/:id" />
             <Route component={CMDResult} path="/cmd/:cmd/:ip/:pid" />

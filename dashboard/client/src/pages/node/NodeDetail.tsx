@@ -66,7 +66,7 @@ const NodeDetailPage = (props: RouteComponentProps<{ id: string }>) => {
 
   return <div className={classes.root}>
     <Typography variant="h5">
-      Node - {params.id} <StatusChip type="node" status="RUNNING" />
+      Node - {params.id} <StatusChip type="node" status={nodeDetail?.state || 'UNKOWN'} />
     </Typography>
     <Paper className={classes.paper}>
       Request Status: {msg} <br />

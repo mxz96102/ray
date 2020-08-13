@@ -79,9 +79,6 @@ const BasicLayout = (props: PropsWithChildren<{ setTheme: ((theme: string) => vo
         <ListItem button className={classnames(classes.menuItem, location.pathname.includes('node') && classes.selected)} onClick={() => history.push('/node')}>
           <ListItemText className={classes.white}>Nodes</ListItemText>
         </ListItem>
-        <ListItem button className={classnames(classes.menuItem, location.pathname.includes('event') && classes.selected)} onClick={() => history.push('/event')}>
-          <ListItemText className={classes.white}>Events</ListItemText>
-        </ListItem>
         <ListItem button className={classnames(classes.menuItem, location.pathname.includes('log') && classes.selected)} onClick={() => history.push('/log')}>
           <ListItemText className={classes.white}>Log</ListItemText>
         </ListItem>

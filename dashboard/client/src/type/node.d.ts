@@ -33,7 +33,7 @@ export type NodeDetail = {
   "errorCounts": number,
   "actors": { [id: string]: Actor },
   "cmdline": string[],
-  "slsUrl": string | {[file: string]: string}
+  "state": string
 }
 
 export type NodeListRsp = {
