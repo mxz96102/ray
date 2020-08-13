@@ -373,13 +373,17 @@ class Worker:
         sys.exit(0)
 
 
-def get_gpu_ids():
+def get_gpu_ids(as_str=False):
     """Get the IDs of the GPUs that are available to the worker.
 
     If the CUDA_VISIBLE_DEVICES environment variable was set when the worker
     started up, then the IDs returned by this method will be a subset of the
     IDs in CUDA_VISIBLE_DEVICES. If not, the IDs will fall in the range
     [0, NUM_GPUS - 1], where NUM_GPUS is the number of GPUs that the node has.
+
+    Args:
+        as_str (Boolean): If true, return gpu ids in string format. By default,
+            it is False. This will change to default to True in the future.
 
     Returns:
         A list of GPU IDs.
@@ -400,7 +404,17 @@ def get_gpu_ids():
         # Give all GPUs in local_mode.
         if global_worker.mode == LOCAL_MODE:
             max_gpus = global_worker.node.get_resource_spec().num_gpus
-            return global_worker.original_gpu_ids[:max_gpus]
+            assigned_ids = global_worker.original_gpu_ids[:max_gpus]
+
+    if not as_str:
+        from ray.util.debug import log_once
+        if log_once("ray.get_gpu_ids.as_str"):
+            logger.warning(
+                "ray.get_gpu_ids() will return a list of strings by default"
+                " in a future version of Ray for compatibility with CUDA. "
+                "To enable the forward-compatible behavior, use "
+                "`ray.get_gpu_ids(as_str=True)`.")
+        assigned_ids = [int(assigned_id) for assigned_id in assigned_ids]
 
     return assigned_ids
 
@@ -499,7 +513,8 @@ def init(address=None,
          use_pickle=True,
          _internal_config=None,
          lru_evict=False,
-         enable_object_reconstruction=False):
+         enable_object_reconstruction=False,
+         _metrics_export_port=None):
     """
     Connect to an existing Ray cluster or start one and connect to it.
 
@@ -625,6 +640,9 @@ def init(address=None,
             created the object. Arguments to the task will be recursively
             reconstructed. If False, then ray.UnreconstructableError will be
             thrown.
+        _metrics_export_port(int): Port number Ray exposes system metrics
+            through a Prometheus endpoint. It is currently under active
+            development, and the API is subject to change.
 
     Returns:
         Address information about the started processes.
@@ -719,7 +737,8 @@ def init(address=None,
             start_initial_python_workers_for_first_job=True,
             _internal_config=_internal_config,
             lru_evict=lru_evict,
-            enable_object_reconstruction=enable_object_reconstruction)
+            enable_object_reconstruction=enable_object_reconstruction,
+            metrics_export_port=_metrics_export_port)
         # Start the Ray processes. We set shutdown_at_exit=False because we
         # shutdown the node in the ray.shutdown call that happens in the atexit
         # handler. We still spawn a reaper process in case the atexit handler
@@ -793,7 +812,8 @@ def init(address=None,
             load_code_from_local=load_code_from_local,
             _internal_config=_internal_config,
             lru_evict=lru_evict,
-            enable_object_reconstruction=enable_object_reconstruction)
+            enable_object_reconstruction=enable_object_reconstruction,
+            metrics_export_port=_metrics_export_port)
         _global_node = ray.node.Node(
             ray_params,
             head=False,
@@ -931,7 +951,7 @@ def _set_log_file(file_name, worker_pid, old_obj, setter_func):
     # and stderr are heavily buffered resulting in seemingly lost logging
     # statements. We never want to close the stdout file descriptor, dup2 will
     # close it when necessary and we don't want python's GC to close it.
-    setter_func(open_log(fileno, closefd=False))
+    setter_func(open_log(fileno, unbuffered=True, closefd=False))
 
     return os.path.abspath(f.name)
 
@@ -1277,20 +1297,11 @@ def connect(node,
     serialized_job_config = job_config.serialize()
     worker.core_worker = ray._raylet.CoreWorker(
         (mode == SCRIPT_MODE or mode == LOCAL_MODE),
-        node.plasma_store_socket_name,
-        node.raylet_socket_name,
-        job_id,
-        gcs_options,
-        node.get_logs_dir_path(),
-        node.node_ip_address,
-        node.node_manager_port,
-        node.raylet_ip_address,
-        (mode == LOCAL_MODE),
-        driver_name,
-        log_stdout_file_path,
-        log_stderr_file_path,
-        serialized_job_config,
-    )
+        node.plasma_store_socket_name, node.raylet_socket_name, job_id,
+        gcs_options, node.get_logs_dir_path(), node.node_ip_address,
+        node.node_manager_port, node.raylet_ip_address, (mode == LOCAL_MODE),
+        driver_name, log_stdout_file_path, log_stderr_file_path,
+        serialized_job_config, node.metrics_agent_port)
 
     # Create an object for interfacing with the global state.
     # Note, global state should be intialized after `CoreWorker`, because it
@@ -1774,7 +1785,7 @@ def make_decorator(num_return_vals=None,
                    max_task_retries=None,
                    worker=None,
                    placement_group_id=None,
-                   placement_group_bundle_index=0):
+                   placement_group_bundle_index=-1):
     def decorator(function_or_class):
         if (inspect.isfunction(function_or_class)
                 or is_cython(function_or_class)):
@@ -1864,7 +1875,8 @@ def remote(*args, **kwargs):
     * **placement_group_id**: the placement group this task belongs to,
         or None if it doesn't belong to any group.
     * **placement_group_bundle_index**: the index of the bundle
-        if the task belongs to a placement group.
+        if the task belongs to a placement group, which may be -1 to indicate
+        any available bundle.
 
     This can be done as follows:
 

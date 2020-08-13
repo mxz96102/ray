@@ -104,14 +104,6 @@ class CoreWorkerClientInterface {
     return empty_addr_;
   }
 
-  /// This is called by the Raylet to assign a task to the worker.
-  ///
-  /// \param[in] request The request message.
-  /// \param[in] callback The callback function that handles reply.
-  /// \return if the rpc call succeeds
-  virtual void AssignTask(const AssignTaskRequest &request,
-                          const ClientCallback<AssignTaskReply> &callback) {}
-
   /// Push an actor task directly from worker to worker.
   ///
   /// \param[in] request The request message.
@@ -149,6 +141,18 @@ class CoreWorkerClientInterface {
   virtual void WaitForObjectEviction(
       const WaitForObjectEvictionRequest &request,
       const ClientCallback<WaitForObjectEvictionReply> &callback) {}
+
+  virtual void AddObjectLocationOwner(
+      const AddObjectLocationOwnerRequest &request,
+      const ClientCallback<AddObjectLocationOwnerReply> &callback) {}
+
+  virtual void RemoveObjectLocationOwner(
+      const RemoveObjectLocationOwnerRequest &request,
+      const ClientCallback<RemoveObjectLocationOwnerReply> &callback) {}
+
+  virtual void GetObjectLocationsOwner(
+      const GetObjectLocationsOwnerRequest &request,
+      const ClientCallback<GetObjectLocationsOwnerReply> &callback) {}
 
   /// Tell this actor to exit immediately.
   virtual void KillActor(const KillActorRequest &request,
@@ -196,8 +200,6 @@ class CoreWorkerClient : public std::enable_shared_from_this<CoreWorkerClient>,
 
   const rpc::Address &Addr() const override { return addr_; }
 
-  VOID_RPC_CLIENT_METHOD(CoreWorkerService, AssignTask, grpc_client_, override)
-
   VOID_RPC_CLIENT_METHOD(CoreWorkerService, DirectActorCallArgWaitComplete, grpc_client_,
                          override)
 
@@ -213,6 +215,15 @@ class CoreWorkerClient : public std::enable_shared_from_this<CoreWorkerClient>,
                          override)
 
   VOID_RPC_CLIENT_METHOD(CoreWorkerService, WaitForObjectEviction, grpc_client_, override)
+
+  VOID_RPC_CLIENT_METHOD(CoreWorkerService, AddObjectLocationOwner, grpc_client_,
+                         override)
+
+  VOID_RPC_CLIENT_METHOD(CoreWorkerService, RemoveObjectLocationOwner, grpc_client_,
+                         override)
+
+  VOID_RPC_CLIENT_METHOD(CoreWorkerService, GetObjectLocationsOwner, grpc_client_,
+                         override)
 
   VOID_RPC_CLIENT_METHOD(CoreWorkerService, GetCoreWorkerStats, grpc_client_, override)
 
