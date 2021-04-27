@@ -1,8 +1,14 @@
 from typing import List, Tuple, Dict, Any
-
+from ray.job_config import JobConfig
+import os
+import sys
 import logging
 
 logger = logging.getLogger(__name__)
+
+# This version string is incremented to indicate breaking changes in the
+# protocol that require upgrading the client version.
+CURRENT_PROTOCOL_VERSION = "2021-04-09"
 
 
 class RayAPIStub:
@@ -23,15 +29,22 @@ class RayAPIStub:
 
     def connect(self,
                 conn_str: str,
+                job_config: JobConfig = None,
                 secure: bool = False,
                 metadata: List[Tuple[str, str]] = None,
-                connection_retries: int = 3) -> Dict[str, Any]:
+                connection_retries: int = 3,
+                *,
+                ignore_version: bool = False) -> Dict[str, Any]:
         """Connect the Ray Client to a server.
 
         Args:
             conn_str: Connection string, in the form "[host]:port"
+            job_config: The job config of the server.
             secure: Whether to use a TLS secured gRPC channel
             metadata: gRPC metadata to send on connect
+            connection_retries: number of connection attempts to make
+            ignore_version: whether to ignore Python or Ray version mismatches.
+                This should only be used for debugging purposes.
 
         Returns:
             Dictionary of connection info, e.g., {"num_clients": 1}.
@@ -56,10 +69,47 @@ class RayAPIStub:
                 metadata=metadata,
                 connection_retries=connection_retries)
             self.api.worker = self.client_worker
-            return self.client_worker.connection_info()
+            self.client_worker._server_init(job_config)
+            conn_info = self.client_worker.connection_info()
+            self._check_versions(conn_info, ignore_version)
+            self._register_serializers()
+            return conn_info
         except Exception:
             self.disconnect()
             raise
+
+    def _register_serializers(self):
+        """Register the custom serializer addons at the client side.
+
+        The server side should have already registered the serializers via
+        regular worker's serialization_context mechanism.
+        """
+        import ray.serialization_addons
+        from ray.util.client.ray_client_helpers import (
+            RayClientSerializationContext)
+        ctx = RayClientSerializationContext()
+        ray.serialization_addons.apply(ctx)
+
+    def _check_versions(self, conn_info: Dict[str, Any],
+                        ignore_version: bool) -> None:
+        local_major_minor = f"{sys.version_info[0]}.{sys.version_info[1]}"
+        if not conn_info["python_version"].startswith(local_major_minor):
+            version_str = f"{local_major_minor}.{sys.version_info[2]}"
+            msg = "Python minor versions differ between client and server:" + \
+                  f" client is {version_str}," + \
+                  f" server is {conn_info['python_version']}"
+            if ignore_version or "RAY_IGNORE_VERSION_MISMATCH" in os.environ:
+                logger.warning(msg)
+            else:
+                raise RuntimeError(msg)
+        if CURRENT_PROTOCOL_VERSION != conn_info["protocol_version"]:
+            msg = "Client Ray installation incompatible with server:" + \
+                  f" client is {CURRENT_PROTOCOL_VERSION}," + \
+                  f" server is {conn_info['protocol_version']}"
+            if ignore_version or "RAY_IGNORE_VERSION_MISMATCH" in os.environ:
+                logger.warning(msg)
+            else:
+                raise RuntimeError(msg)
 
     def disconnect(self):
         """Disconnect the Ray Client.
@@ -97,8 +147,9 @@ class RayAPIStub:
         if self._server is not None:
             raise Exception("Trying to start two instances of ray via client")
         import ray.util.client.server.server as ray_client_server
-        self._server, address_info = ray_client_server.init_and_serve(
+        server_handle, address_info = ray_client_server.init_and_serve(
             "localhost:50051", *args, **kwargs)
+        self._server = server_handle.grpc_server
         self.connect("localhost:50051")
         self._connected_with_init = True
         return address_info

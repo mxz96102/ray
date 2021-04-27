@@ -3,9 +3,12 @@ from typing import Any, Callable, Dict, Mapping, Optional, Sequence, Type, \
 
 import datetime
 import logging
+import os
+import signal
 import sys
 import time
 
+import ray
 from ray.tune.analysis import ExperimentAnalysis
 from ray.tune.callback import Callback
 from ray.tune.error import TuneError
@@ -29,6 +32,7 @@ from ray.tune.utils.log import Verbosity, has_verbosity, set_verbosity
 
 # Must come last to avoid circular imports
 from ray.tune.schedulers import FIFOScheduler, TrialScheduler
+from ray.tune.utils.placement_groups import PlacementGroupFactory
 
 logger = logging.getLogger(__name__)
 
@@ -73,7 +77,8 @@ def run(
                                                      bool]] = None,
         time_budget_s: Union[None, int, float, datetime.timedelta] = None,
         config: Optional[Dict[str, Any]] = None,
-        resources_per_trial: Optional[Mapping[str, Union[float, int]]] = None,
+        resources_per_trial: Union[None, Mapping[str, Union[
+            float, int, Mapping]], PlacementGroupFactory] = None,
         num_samples: int = 1,
         local_dir: Optional[str] = None,
         search_alg: Optional[Union[Searcher, SearchAlgorithm]] = None,
@@ -109,8 +114,13 @@ def run(
         sync_to_cloud: Optional = None,
         sync_to_driver: Optional = None,
         sync_on_checkpoint: Optional = None,
+        _remote: bool = None,
 ) -> ExperimentAnalysis:
     """Executes training.
+
+    When a SIGINT signal is received (e.g. through Ctrl+C), the tuning run
+    will gracefully shut down and checkpoint the latest experiment state.
+    Sending SIGINT again (or SIGKILL/SIGTERM instead) will skip this step.
 
     Examples:
 
@@ -171,11 +181,13 @@ def run(
         config (dict): Algorithm-specific configuration for Tune variant
             generation (e.g. env, hyperparams). Defaults to empty dict.
             Custom search algorithms may ignore this.
-        resources_per_trial (dict|Callable): Machine resources to allocate per
-            trial, e.g. ``{"cpu": 64, "gpu": 8}``. Note that GPUs will not be
-            assigned unless you specify them here. Defaults to 1 CPU and 0
-            GPUs in ``Trainable.default_resource_request()``. This can also
-            be a function returning a placement group.
+        resources_per_trial (dict|PlacementGroupFactory): Machine resources
+            to allocate per trial, e.g. ``{"cpu": 64, "gpu": 8}``.
+            Note that GPUs will not be assigned unless you specify them here.
+            Defaults to 1 CPU and 0 GPUs in
+            ``Trainable.default_resource_request()``. This can also
+            be a PlacementGroupFactory object wrapping arguments to create a
+            per-trial placement group.
         num_samples (int): Number of times to sample from the
             hyperparameter space. Defaults to 1. If `grid_search` is
             provided as an argument, the grid will be repeated
@@ -264,7 +276,9 @@ def run(
             ``ray.tune.callback.Callback`` class. If not passed,
             `LoggerCallback` and `SyncerCallback` callbacks are automatically
             added.
-
+        _remote (bool): Whether to run the Tune driver in a remote function.
+            This is disabled automatically if a custom trial executor is
+            passed in. This is enabled by default in Ray client mode.
 
     Returns:
         ExperimentAnalysis: Object for experiment analysis.
@@ -272,6 +286,64 @@ def run(
     Raises:
         TuneError: Any trials failed and `raise_on_failed_trial` is True.
     """
+
+    if _remote is None:
+        _remote = ray.util.client.ray.is_connected()
+
+    if _remote is True and trial_executor:
+        raise ValueError("cannot use custom trial executor")
+
+    if not trial_executor or isinstance(trial_executor, RayTrialExecutor):
+        _ray_auto_init()
+
+    if _remote:
+        return ray.get(
+            ray.remote(num_cpus=0)(run).remote(
+                run_or_experiment,
+                name,
+                metric,
+                mode,
+                stop,
+                time_budget_s,
+                config,
+                resources_per_trial,
+                num_samples,
+                local_dir,
+                search_alg,
+                scheduler,
+                keep_checkpoints_num,
+                checkpoint_score_attr,
+                checkpoint_freq,
+                checkpoint_at_end,
+                verbose,
+                progress_reporter,
+                log_to_file,
+                trial_name_creator,
+                trial_dirname_creator,
+                sync_config,
+                export_formats,
+                max_failures,
+                fail_fast,
+                restore,
+                server_port,
+                resume,
+                queue_trials,
+                reuse_actors,
+                trial_executor,
+                raise_on_failed_trial,
+                callbacks,
+                # Deprecated args
+                loggers,
+                ray_auto_init,
+                run_errored_only,
+                global_checkpoint_period,
+                with_server,
+                upload_dir,
+                sync_to_cloud,
+                sync_to_driver,
+                sync_on_checkpoint,
+                _remote=False))
+
     all_start = time.time()
     if global_checkpoint_period:
         raise ValueError("global_checkpoint_period is deprecated. Set env var "
@@ -427,8 +499,24 @@ def run(
                            "`Trainable.default_resource_request` if using the "
                            "Trainable API.")
 
+    original_handler = signal.getsignal(signal.SIGINT)
+    state = {signal.SIGINT: False}
+
+    def sigint_handler(sig, frame):
+        logger.warning(
+            "SIGINT received (e.g. via Ctrl+C), ending Ray Tune run. "
+            "This will try to checkpoint the experiment state one last time. "
+            "Press CTRL+C one more time (or send SIGINT/SIGKILL/SIGTERM) "
+            "to skip. ")
+        state[signal.SIGINT] = True
+        # Restore original signal handler to react to future SIGINT signals
+        signal.signal(signal.SIGINT, original_handler)
+
+    if not int(os.getenv("TUNE_DISABLE_SIGINT_HANDLER", "0")):
+        signal.signal(signal.SIGINT, sigint_handler)
+
     tune_start = time.time()
-    while not runner.is_finished():
+    while not runner.is_finished() and not state[signal.SIGINT]:
         runner.step()
         if has_verbosity(Verbosity.V1_EXPERIMENT):
             _report_progress(runner, progress_reporter)
@@ -451,7 +539,7 @@ def run(
             incomplete_trials += [trial]
 
     if incomplete_trials:
-        if raise_on_failed_trial:
+        if raise_on_failed_trial and not state[signal.SIGINT]:
             raise TuneError("Trials did not complete", incomplete_trials)
         else:
             logger.error("Trials did not complete: %s", incomplete_trials)
@@ -460,6 +548,12 @@ def run(
     if has_verbosity(Verbosity.V1_EXPERIMENT):
         logger.info(f"Total run time: {all_taken:.2f} seconds "
                     f"({tune_taken:.2f} seconds for the tuning loop).")
+
+    if state[signal.SIGINT]:
+        logger.warning(
+            "Experiment has been interrupted, but the most recent state was "
+            "saved. You can continue running this experiment by passing "
+            "`resume=True` to `tune.run()`")
 
     trials = runner.get_trials()
     return ExperimentAnalysis(
@@ -482,7 +576,8 @@ def run_experiments(
         trial_executor: Optional[RayTrialExecutor] = None,
         raise_on_failed_trial: bool = True,
         concurrent: bool = True,
-        callbacks: Optional[Sequence[Callback]] = None):
+        callbacks: Optional[Sequence[Callback]] = None,
+        _remote: bool = None):
     """Runs and blocks until all trials finish.
 
     Examples:
@@ -496,6 +591,32 @@ def run_experiments(
         List of Trial objects, holding data for each executed trial.
 
     """
+    if _remote is None:
+        _remote = ray.util.client.ray.is_connected()
+
+    if _remote is True and trial_executor:
+        raise ValueError("cannot use custom trial executor")
+
+    if not trial_executor or isinstance(trial_executor, RayTrialExecutor):
+        _ray_auto_init()
+
+    if _remote:
+        return ray.get(
+            ray.remote(num_cpus=0)(run_experiments).remote(
+                experiments,
+                scheduler,
+                server_port,
+                verbose,
+                progress_reporter,
+                resume,
+                queue_trials,
+                reuse_actors,
+                trial_executor,
+                raise_on_failed_trial,
+                concurrent,
+                callbacks,
+                _remote=False))
+
     # This is important to do this here
     # because it schematize the experiments
     # and it conducts the implicit registration.
@@ -530,3 +651,14 @@ def run_experiments(
                 scheduler=scheduler,
                 callbacks=callbacks).trials
         return trials
+
+
+def _ray_auto_init():
+    """Initialize Ray unless already configured."""
+    if os.environ.get("TUNE_DISABLE_AUTO_INIT") == "1":
+        logger.info("'TUNE_DISABLE_AUTO_INIT=1' detected.")
+    elif not ray.is_initialized():
+        logger.info("Initializing Ray automatically."
+                    "For cluster usage or custom Ray initialization, "
+                    "call `ray.init(...)` before `tune.run`.")
+        ray.init()

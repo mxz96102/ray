@@ -3,7 +3,7 @@ import gym
 from gym.spaces import Box, Dict, Discrete, MultiDiscrete, Tuple
 import logging
 import numpy as np
-import tree
+import tree  # pip install dm_tree
 from typing import List, Optional, Type, Union
 
 from ray.tune.registry import RLLIB_MODEL, RLLIB_PREPROCESSOR, \
@@ -19,7 +19,7 @@ from ray.rllib.models.torch.torch_action_dist import TorchCategorical, \
     TorchDeterministic, TorchDiagGaussian, \
     TorchMultiActionDistribution, TorchMultiCategorical
 from ray.rllib.utils.annotations import DeveloperAPI, PublicAPI
-from ray.rllib.utils.deprecation import DEPRECATED_VALUE, deprecation_warning
+from ray.rllib.utils.deprecation import DEPRECATED_VALUE
 from ray.rllib.utils.error import UnsupportedSpaceException
 from ray.rllib.utils.framework import try_import_tf, try_import_torch
 from ray.rllib.utils.spaces.simplex import Simplex
@@ -56,6 +56,18 @@ MODEL_DEFAULTS: ModelConfigDict = {
     # "linear" (or None).
     "conv_activation": "relu",
 
+    # Some default models support a final FC stack of n Dense layers with given
+    # activation:
+    # - Complex observation spaces: Image components are fed through
+    #   VisionNets, flat Boxes are left as-is, Discrete are one-hot'd, then
+    #   everything is concated and pushed through this final FC stack.
+    # - VisionNets (CNNs), e.g. after the CNN stack, there may be
+    #   additional Dense layers.
+    # - FullyConnectedNetworks will have this additional FCStack as well
+    # (that's why it's empty by default).
+    "post_fcnet_hiddens": [],
+    "post_fcnet_activation": "relu",
+
     # For DiagGaussian action distributions, make the second half of the model
     # outputs floating bias variables instead of state-dependent. This only
     # has an effect is using the default fully connected net.
@@ -78,7 +90,6 @@ MODEL_DEFAULTS: ModelConfigDict = {
     "lstm_use_prev_action": False,
     # Whether to feed r_{t-1} to LSTM.
     "lstm_use_prev_reward": False,
-    # Experimental (only works with `_use_trajectory_view_api`=True):
     # Whether the LSTM is time-major (TxBx..) or batch-major (BxTx..).
     "_time_major": False,
 
@@ -103,10 +114,10 @@ MODEL_DEFAULTS: ModelConfigDict = {
     "attention_position_wise_mlp_dim": 32,
     # The initial bias values for the 2 GRU gates within a transformer unit.
     "attention_init_gru_gate_bias": 2.0,
-    # TODO: Whether to feed a_{t-n:t-1} to GTrXL (one-hot encoded if discrete).
-    # "attention_use_n_prev_actions": 0,
+    # Whether to feed a_{t-n:t-1} to GTrXL (one-hot encoded if discrete).
+    "attention_use_n_prev_actions": 0,
     # Whether to feed r_{t-n:t-1} to GTrXL.
-    # "attention_use_n_prev_rewards": 0,
+    "attention_use_n_prev_rewards": 0,
 
     # == Atari ==
     # Which framestacking size to use for Atari envs.
@@ -216,20 +227,33 @@ class ModelCatalog:
             dist_cls = dist_type
         # Box space -> DiagGaussian OR Deterministic.
         elif isinstance(action_space, Box):
-            if len(action_space.shape) > 1:
-                raise UnsupportedSpaceException(
-                    "Action space has multiple dimensions "
-                    "{}. ".format(action_space.shape) +
-                    "Consider reshaping this into a single dimension, "
-                    "using a custom action distribution, "
-                    "using a Tuple action space, or the multi-agent API.")
-            # TODO(sven): Check for bounds and return SquashedNormal, etc..
-            if dist_type is None:
-                dist_cls = TorchDiagGaussian if framework == "torch" \
-                    else DiagGaussian
-            elif dist_type == "deterministic":
-                dist_cls = TorchDeterministic if framework == "torch" \
-                    else Deterministic
+            if action_space.dtype.name.startswith("int"):
+                low_ = np.min(action_space.low)
+                high_ = np.max(action_space.high)
+                assert np.all(action_space.low == low_)
+                assert np.all(action_space.high == high_)
+                dist_cls = TorchMultiCategorical if framework == "torch" \
+                    else MultiCategorical
+                num_cats = int(np.product(action_space.shape))
+                return partial(
+                    dist_cls,
+                    input_lens=[high_ - low_ + 1 for _ in range(num_cats)],
+                    action_space=action_space), num_cats * (high_ - low_ + 1)
+            else:
+                if len(action_space.shape) > 1:
+                    raise UnsupportedSpaceException(
+                        "Action space has multiple dimensions "
+                        "{}. ".format(action_space.shape) +
+                        "Consider reshaping this into a single dimension, "
+                        "using a custom action distribution, "
+                        "using a Tuple action space, or the multi-agent API.")
+                # TODO(sven): Check for bounds and return SquashedNormal, etc..
+                if dist_type is None:
+                    dist_cls = TorchDiagGaussian if framework == "torch" \
+                        else DiagGaussian
+                elif dist_type == "deterministic":
+                    dist_cls = TorchDeterministic if framework == "torch" \
+                        else Deterministic
         # Discrete Space -> Categorical.
         elif isinstance(action_space, Discrete):
             dist_cls = TorchCategorical if framework == "torch" else \
@@ -316,7 +340,8 @@ class ModelCatalog:
             action_placeholder (Tensor): A placeholder for the actions
         """
 
-        dtype, shape = ModelCatalog.get_action_shape(action_space)
+        dtype, shape = ModelCatalog.get_action_shape(
+            action_space, framework="tf")
 
         return tf1.placeholder(dtype, shape=shape, name=name)
 
@@ -688,17 +713,22 @@ class ModelCatalog:
                             framework: str = "tf") -> Type[ModelV2]:
 
         VisionNet = None
+        ComplexNet = None
 
         if framework in ["tf2", "tf", "tfe"]:
             from ray.rllib.models.tf.fcnet import \
                 FullyConnectedNetwork as FCNet
             from ray.rllib.models.tf.visionnet import \
                 VisionNetwork as VisionNet
+            from ray.rllib.models.tf.complex_input_net import \
+                ComplexInputNetwork as ComplexNet
         elif framework == "torch":
             from ray.rllib.models.torch.fcnet import (FullyConnectedNetwork as
                                                       FCNet)
             from ray.rllib.models.torch.visionnet import (VisionNetwork as
                                                           VisionNet)
+            from ray.rllib.models.torch.complex_input_net import \
+                ComplexInputNetwork as ComplexNet
         elif framework == "jax":
             from ray.rllib.models.jax.fcnet import (FullyConnectedNetwork as
                                                     FCNet)
@@ -710,16 +740,29 @@ class ModelCatalog:
         # Discrete/1D obs-spaces or 2D obs space but traj. view framestacking
         # disabled.
         num_framestacks = model_config.get("num_framestacks", "auto")
+
+        # Tuple space, where at least one sub-space is image.
+        # -> Complex input model.
+        space_to_check = input_space if not hasattr(
+            input_space, "original_space") else input_space.original_space
+        if isinstance(input_space,
+                      Tuple) or (isinstance(space_to_check, Tuple) and any(
+                          isinstance(s, Box) and len(s.shape) >= 2
+                          for s in space_to_check.spaces)):
+            return ComplexNet
+
+        # Single, flattenable/one-hot-abe space -> Simple FCNet.
         if isinstance(input_space, (Discrete, MultiDiscrete)) or \
                 len(input_space.shape) == 1 or (
                 len(input_space.shape) == 2 and (
                 num_framestacks == "auto" or num_framestacks <= 1)):
             return FCNet
-        # Default Conv2D net.
-        else:
-            if framework == "jax":
-                raise NotImplementedError("No Conv2D default net for JAX yet!")
-            return VisionNet
+
+        elif framework == "jax":
+            raise NotImplementedError("No non-FC default net for JAX yet!")
+
+        # Last resort: Conv2D stack for single image spaces.
+        return VisionNet
 
     @staticmethod
     def _get_multi_action_distribution(dist_class, action_space, config,
@@ -768,8 +811,8 @@ class ModelCatalog:
                                  "framework=jax so far!")
 
         if config.get("framestack") != DEPRECATED_VALUE:
-            deprecation_warning(
-                old="framestack", new="num_framestacks (int)", error=False)
+            # deprecation_warning(
+            #     old="framestack", new="num_framestacks (int)", error=False)
             # If old behavior is desired, disable traj. view-style
             # framestacking.
             config["num_framestacks"] = 0

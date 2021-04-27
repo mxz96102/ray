@@ -6,22 +6,7 @@ import time
 import ray
 from ray.test_utils import (RayTestTimeoutException, run_string_as_driver,
                             run_string_as_driver_nonblocking,
-                            wait_for_condition, init_error_pubsub,
-                            get_error_message)
-
-
-def test_remote_raylet_cleanup(ray_start_cluster):
-    cluster = ray_start_cluster
-    cluster.add_node()
-    cluster.add_node()
-    cluster.add_node()
-    cluster.wait_for_nodes()
-
-    def remote_raylets_dead():
-        return not cluster.remaining_processes_alive()
-
-    cluster.remove_node(cluster.head_node, allow_graceful=False)
-    wait_for_condition(remote_raylets_dead)
+                            init_error_pubsub, get_error_message)
 
 
 def test_error_isolation(call_ray_start):
@@ -178,6 +163,16 @@ print("success")
         assert "success" in out
 
 
+@pytest.mark.parametrize(
+    "call_ray_start",
+    [
+        "ray start --head --num-cpus=1 --min-worker-port=0 "
+        "--max-worker-port=0 --port 0 --system-config="
+        # This test uses ray.objects(), which only works with the GCS-based
+        # object directory
+        "{\"ownership_based_object_directory_enabled\":false}",
+    ],
+    indirect=True)
 def test_cleanup_on_driver_exit(call_ray_start):
     # This test will create a driver that creates a bunch of objects and then
     # exits. The entries in the object table should be cleaned up.
@@ -344,7 +339,7 @@ print("success")
         # Wait until the process prints "success" and then return.
         start_time = time.time()
         while time.time() - start_time < timeout:
-            output_line = ray.utils.decode(
+            output_line = ray._private.utils.decode(
                 process_handle.stdout.readline()).strip()
             print(output_line)
             if output_line == "success":

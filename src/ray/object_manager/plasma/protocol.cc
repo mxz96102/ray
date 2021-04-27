@@ -553,16 +553,16 @@ Status ReadEvictReply(uint8_t *data, size_t size, int64_t &num_bytes) {
 // Get messages.
 
 Status SendGetRequest(const std::shared_ptr<StoreConn> &store_conn,
-                      const ObjectID *object_ids, int64_t num_objects,
-                      int64_t timeout_ms) {
+                      const ObjectID *object_ids, int64_t num_objects, int64_t timeout_ms,
+                      bool is_from_worker) {
   flatbuffers::FlatBufferBuilder fbb;
   auto message = fb::CreatePlasmaGetRequest(
-      fbb, ToFlatbuffer(&fbb, object_ids, num_objects), timeout_ms);
+      fbb, ToFlatbuffer(&fbb, object_ids, num_objects), timeout_ms, is_from_worker);
   return PlasmaSend(store_conn, MessageType::PlasmaGetRequest, &fbb, message);
 }
 
 Status ReadGetRequest(uint8_t *data, size_t size, std::vector<ObjectID> &object_ids,
-                      int64_t *timeout_ms) {
+                      int64_t *timeout_ms, bool *is_from_worker) {
   RAY_DCHECK(data);
   auto message = flatbuffers::GetRoot<fb::PlasmaGetRequest>(data);
   RAY_DCHECK(VerifyFlatbuffer(message, data, size));
@@ -571,6 +571,7 @@ Status ReadGetRequest(uint8_t *data, size_t size, std::vector<ObjectID> &object_
     object_ids.push_back(ObjectID::FromBinary(object_id));
   }
   *timeout_ms = message->timeout_ms();
+  *is_from_worker = message->is_from_worker();
   return Status::OK();
 }
 
@@ -625,89 +626,6 @@ Status ReadGetReply(uint8_t *data, size_t size, ObjectID object_ids[],
     store_fds.push_back(INT2FD(message->store_fds()->Get(i)));
     mmap_sizes.push_back(message->mmap_sizes()->Get(i));
   }
-  return Status::OK();
-}
-
-// Data messages.
-
-Status SendDataRequest(const std::shared_ptr<StoreConn> &store_conn, ObjectID object_id,
-                       const char *address, int port) {
-  flatbuffers::FlatBufferBuilder fbb;
-  auto addr = fbb.CreateString(address, strlen(address));
-  auto message =
-      fb::CreatePlasmaDataRequest(fbb, fbb.CreateString(object_id.Binary()), addr, port);
-  return PlasmaSend(store_conn, MessageType::PlasmaDataRequest, &fbb, message);
-}
-
-Status ReadDataRequest(uint8_t *data, size_t size, ObjectID *object_id, char **address,
-                       int *port) {
-  RAY_DCHECK(data);
-  auto message = flatbuffers::GetRoot<fb::PlasmaDataRequest>(data);
-  RAY_DCHECK(VerifyFlatbuffer(message, data, size));
-  RAY_DCHECK(message->object_id()->size() == sizeof(ObjectID));
-  *object_id = ObjectID::FromBinary(message->object_id()->str());
-#ifdef _WIN32
-  *address = _strdup(message->address()->c_str());
-#else
-  *address = strdup(message->address()->c_str());
-#endif
-  *port = message->port();
-  return Status::OK();
-}
-
-Status SendDataReply(const std::shared_ptr<Client> &client, ObjectID object_id,
-                     int64_t object_size, int64_t metadata_size) {
-  flatbuffers::FlatBufferBuilder fbb;
-  auto message = fb::CreatePlasmaDataReply(fbb, fbb.CreateString(object_id.Binary()),
-                                           object_size, metadata_size);
-  return PlasmaSend(client, MessageType::PlasmaDataReply, &fbb, message);
-}
-
-Status ReadDataReply(uint8_t *data, size_t size, ObjectID *object_id,
-                     int64_t *object_size, int64_t *metadata_size) {
-  RAY_DCHECK(data);
-  auto message = flatbuffers::GetRoot<fb::PlasmaDataReply>(data);
-  RAY_DCHECK(VerifyFlatbuffer(message, data, size));
-  *object_id = ObjectID::FromBinary(message->object_id()->str());
-  *object_size = static_cast<int64_t>(message->object_size());
-  *metadata_size = static_cast<int64_t>(message->metadata_size());
-  return Status::OK();
-}
-
-// RefreshLRU messages.
-
-Status SendRefreshLRURequest(const std::shared_ptr<StoreConn> &store_conn,
-                             const std::vector<ObjectID> &object_ids) {
-  flatbuffers::FlatBufferBuilder fbb;
-
-  auto message = fb::CreatePlasmaRefreshLRURequest(
-      fbb, ToFlatbuffer(&fbb, object_ids.data(), object_ids.size()));
-
-  return PlasmaSend(store_conn, MessageType::PlasmaRefreshLRURequest, &fbb, message);
-}
-
-Status ReadRefreshLRURequest(uint8_t *data, size_t size,
-                             std::vector<ObjectID> *object_ids) {
-  RAY_DCHECK(data);
-  auto message = flatbuffers::GetRoot<fb::PlasmaRefreshLRURequest>(data);
-  RAY_DCHECK(VerifyFlatbuffer(message, data, size));
-  for (uoffset_t i = 0; i < message->object_ids()->size(); ++i) {
-    auto object_id = message->object_ids()->Get(i)->str();
-    object_ids->push_back(ObjectID::FromBinary(object_id));
-  }
-  return Status::OK();
-}
-
-Status SendRefreshLRUReply(const std::shared_ptr<Client> &client) {
-  flatbuffers::FlatBufferBuilder fbb;
-  auto message = fb::CreatePlasmaRefreshLRUReply(fbb);
-  return PlasmaSend(client, MessageType::PlasmaRefreshLRUReply, &fbb, message);
-}
-
-Status ReadRefreshLRUReply(uint8_t *data, size_t size) {
-  RAY_DCHECK(data);
-  auto message = flatbuffers::GetRoot<fb::PlasmaRefreshLRUReply>(data);
-  RAY_DCHECK(VerifyFlatbuffer(message, data, size));
   return Status::OK();
 }
 
