@@ -1,4 +1,5 @@
 import {
+  Grid,
   InputAdornment,
   Table,
   TableBody,
@@ -161,9 +162,8 @@ const ActorTable = ({
           <TableRow>
             {[
               "",
-              "ID(Num Restarts)",
-              "Name",
-              "Task Func Desc",
+              "ID",
+              "Num Restarts",
               "Job Id",
               "Pid",
               "IP",
@@ -198,15 +198,28 @@ const ActorTable = ({
                   ).length
                 }
                 expandComponent={
-                  <RayletWorkerTable
-                    actorMap={{}}
-                    workers={workers.filter(
+                  <>
+                    <Grid container>
+                      {name && <Grid item>Name: {name}</Grid>}
+                      {functionDesc && <Grid item>Function: {functionDesc}</Grid>}
+                    </Grid>
+                    {workers.filter(
                       (e) =>
                         e.pid === pid &&
                         address.ipAddress === e.coreWorkerStats[0].ipAddress,
-                    )}
-                    mini
-                  />
+                    ).length ? (
+                      <RayletWorkerTable
+                        actorMap={{}}
+                        workers={workers.filter(
+                          (e) =>
+                            e.pid === pid &&
+                            address.ipAddress ===
+                              e.coreWorkerStats[0].ipAddress,
+                        )}
+                        mini
+                      />
+                    ) : null}
+                  </>
                 }
                 key={actorId}
               >
@@ -216,13 +229,10 @@ const ActorTable = ({
                     color: Number(numRestarts) > 0 ? orange[500] : "inherit",
                   }}
                 >
-                  {actorId}({numRestarts})
+                  {actorId}
                 </TableCell>
-                <TableCell align="center">{name}</TableCell>
-                <TableCell align="center">
-                  {longTextCut(functionDesc, 60)}
-                </TableCell>
-                <TableCell align="center">{jobId}</TableCell>
+                <TableCell align="center">{numRestarts}</TableCell>
+                <TableCell align="center"><Link to={`/job/${jobId}`}>{jobId}</Link></TableCell>
                 <TableCell align="center">{pid}</TableCell>
                 <TableCell align="center">{address?.ipAddress}</TableCell>
                 <TableCell align="center">{address?.port}</TableCell>

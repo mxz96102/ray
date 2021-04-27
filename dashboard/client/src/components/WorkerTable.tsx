@@ -51,15 +51,6 @@ export const ExpandableTableRow = ({
     }
   }, [stateKey]);
 
-  if (length < 1) {
-    return (
-      <TableRow {...otherProps}>
-        <TableCell padding="checkbox" />
-        {children}
-      </TableRow>
-    );
-  }
-
   return (
     <React.Fragment>
       <TableRow {...otherProps}>
@@ -68,7 +59,7 @@ export const ExpandableTableRow = ({
             style={{ color: "inherit" }}
             onClick={() => setIsExpanded(!isExpanded)}
           >
-            {length}
+            {length || ''}
             {isExpanded ? <KeyboardArrowDown /> : <KeyboardArrowRight />}
           </IconButton>
         </TableCell>
