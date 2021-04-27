@@ -12,7 +12,7 @@ export const getLogDetail = async (url: string) => {
       }
     }
   }
-  const rsp = await get(
+  const rsp = await get<string>(
     url === "log_index" ? url : `log_proxy?url=${encodeURIComponent(url)}`,
   );
   if (rsp.headers["content-type"]?.includes("html")) {
@@ -20,7 +20,7 @@ export const getLogDetail = async (url: string) => {
     el.innerHTML = rsp.data;
     let arr: { [key: string]: string }[] = Array.from(el.getElementsByTagName("li")).map(
       (li: HTMLLIElement) => {
-        const a = li.children[0] as HTMLAnchorElement;
+        const a:any = li.children[0];
         const result: { [key: string]: string } = {
           name: li.innerText,
           href: li.innerText.includes("http") ? a.href : a.pathname,
@@ -31,5 +31,5 @@ export const getLogDetail = async (url: string) => {
     return arr;
   }
 
-  return rsp.data as string;
+  return rsp.data;
 };

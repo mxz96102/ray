@@ -8,11 +8,11 @@ export const longTextCut = (text: string = "", len: number = 28) => (
 );
 
 export const jsonFormat = (str: string | object) => {
-  const preStyle = {
+  const preStyle: CSSProperties = {
     textAlign: "left",
     wordBreak: "break-all",
     whiteSpace: "pre-wrap",
-  } as CSSProperties;
+  };
   if (typeof str === "object") {
     return <pre style={preStyle}>{JSON.stringify(str, null, 2)}</pre>;
   }

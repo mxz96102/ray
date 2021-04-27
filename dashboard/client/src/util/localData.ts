@@ -1,7 +1,8 @@
 export const getLocalStorage = <T>(key: string) => {
   const data = window.localStorage.getItem(key);
   try {
-    return JSON.parse(data || "") as T;
+    const result: T = JSON.parse(data || "")
+    return result;
   } catch {
     return data;
   }

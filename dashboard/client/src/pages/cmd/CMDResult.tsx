@@ -96,7 +96,7 @@ const CMDResult = (
               <Grid item>
                 <Select
                   value={option}
-                  onChange={(e) => setOption(e.target.value as string)}
+                  onChange={(e) => setOption(String(e.target.value))}
                 >
                   {[
                     "class",

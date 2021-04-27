@@ -21,7 +21,7 @@ const get = async <T>(path: string, params: { [key: string]: any }) => {
     throw Error(msg);
   }
 
-  return data as T;
+  return data;
 };
 
 export type RayConfigResponse = {

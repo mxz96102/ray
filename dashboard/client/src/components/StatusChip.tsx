@@ -55,15 +55,15 @@ export const StatusChip = ({
   status: string | ActorEnum | ReactNode;
   suffix?: string;
 }) => {
-  const style = {
+  const style: CSSProperties = {
     padding: "2px 8px",
     border: "solid 1px",
     borderRadius: 4,
     fontSize: 12,
     margin: 2,
-  } as CSSProperties;
+  };
 
-  let color = blueGrey as Color;
+  let color: Color = blueGrey;
 
   if (typeMap[type]) {
     color = typeMap[type];

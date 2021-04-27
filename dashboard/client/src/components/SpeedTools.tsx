@@ -71,11 +71,11 @@ const useStyle = makeStyles((theme) => ({
 
 const ObjectIdReader = () => {
   const [id, setId] = useState("");
-  const tagList = [
+  const tagList:  [string, number, number][] = [
     ["Create From Task", 15, 1],
     ["Put Object", 14, 0],
     ["Return Object", 14, 1],
-  ] as [string, number, number][];
+  ];
 
   return (
     <div style={{ padding: 8 }}>

@@ -66,7 +66,7 @@ export const SearchSelect = ({
       SelectProps={{
         onChange: ({ target: { value } }) => {
           if (onChange) {
-            onChange(value as string);
+            onChange(String(value));
           }
         },
         style: {

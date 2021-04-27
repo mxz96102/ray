@@ -37,13 +37,19 @@ export const GlobalContext = React.createContext<GlobalContextType>({
   namespaceMap: {},
 });
 
-export const getDefaultTheme = () =>
-  getLocalStorage<string>(RAY_DASHBOARD_THEME_KEY) || "light";
+export const getDefaultTheme = () => {
+  const theme = getLocalStorage<"light" | "dark">(RAY_DASHBOARD_THEME_KEY);
+  if (theme === "light" || theme === "dark") {
+    return theme;
+  }
+  return "light"
+}
+
 export const setLocalTheme = (theme: string) =>
   setLocalStorage(RAY_DASHBOARD_THEME_KEY, theme);
 
 const App = () => {
-  const [theme, _setTheme] = useState(getDefaultTheme());
+  const [theme, _setTheme] = useState<"light" | "dark">(getDefaultTheme());
   const [context, setContext] = useState<{
     nodeMap: { [key: string]: string };
     ipLogMap: { [key: string]: string };
@@ -58,7 +64,7 @@ const App = () => {
         return lightTheme;
     }
   };
-  const setTheme = (name: string) => {
+  const setTheme = (name: "light"|"dark") => {
     setLocalTheme(name);
     _setTheme(name);
   };
@@ -94,7 +100,7 @@ const App = () => {
                       <Route component={Actors} exact path="/actors" />
                       <Route
                         render={(props) => (
-                          <Logs {...props} theme={theme as "light" | "dark"} />
+                          <Logs {...props} theme={theme} />
                         )}
                         exact
                         path="/log/:host?/:path?"
