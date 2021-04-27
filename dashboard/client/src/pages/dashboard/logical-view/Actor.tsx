@@ -107,7 +107,7 @@ const Actor: React.FC<ActorProps> = ({ actor }) => {
       .map((key, _, __) => {
         // Construct the value from actor.
         // Please refer to worker.py::show_in_webui for schema.
-        const valueEncoded = actor.webuiDisplay![key];
+        const valueEncoded = actor.webuiDisplay ? actor.webuiDisplay[key] : '';
         const valueParsed = JSON.parse(valueEncoded);
         let valueRendered = valueParsed["message"];
         if (valueParsed["dtype"] === "html") {
