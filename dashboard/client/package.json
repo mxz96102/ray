@@ -32,7 +32,7 @@
     "react-scripts": "^3.4.3",
     "react-window": "^1.8.5",
     "typeface-roboto": "0.0.75",
-    "typescript": "3.8.3",
+    "typescript": "^3.8.3",
     "use-debounce": "^3.4.3"
   },
   "devDependencies": {
