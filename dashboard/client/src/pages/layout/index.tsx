@@ -57,7 +57,7 @@ const useStyles = makeStyles((theme) => ({
 
 const BasicLayout = (
   props: PropsWithChildren<
-    { setTheme: (theme: string) => void; theme: string } & RouteComponentProps
+    { setTheme: (theme: "light"|"dark") => void; theme: string } & RouteComponentProps
   >,
 ) => {
   const classes = useStyles();

@@ -1,4 +1,4 @@
-export const descendingComparator = <T>(a: T, b: T, orderBy: keyof T) => {
+export const descendingComparator: <T>(a: T, b: T, orderBy: keyof T) => number = (a, b, orderBy) => {
   if (b[orderBy] < a[orderBy]) {
     return -1;
   }
@@ -8,11 +8,11 @@ export const descendingComparator = <T>(a: T, b: T, orderBy: keyof T) => {
   return 0;
 };
 
-const descendingComparatorFnAccessor = <T>(
+const descendingComparatorFnAccessor: <T>(
   a: T,
   b: T,
   orderByFn: Accessor<T>,
-) => {
+) => number = (a, b, orderByFn) => {
   const aVal = orderByFn(a);
   const bVal = orderByFn(b);
   if (bVal < aVal) {

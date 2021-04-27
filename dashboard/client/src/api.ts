@@ -17,7 +17,7 @@ const get = async <T>(path: string, params: { [key: string]: any }) => {
 
   const { result, msg, data } = json;
 
-  if (!result) {
+  if (!result || data === undefined) {
     throw Error(msg);
   }
 

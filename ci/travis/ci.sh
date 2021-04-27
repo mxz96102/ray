@@ -492,6 +492,7 @@ init() {
 
   # shellcheck disable=SC2031
   . "${ROOT_DIR}"/install-dependencies.sh  # Script is sourced to propagate up environment changes
+  build_dashboard_front_end
 }
 
 build() {
