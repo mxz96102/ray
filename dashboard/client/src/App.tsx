@@ -24,11 +24,17 @@ const NodeDetail = React.lazy(() => import("./pages/node/NodeDetail"));
 // key to store theme in local storage
 const RAY_DASHBOARD_THEME_KEY = "ray-dashboard-theme";
 
+interface GlobalContextType {
+  nodeMap: { [key: string]: string },
+  ipLogMap: { [key: string]: string },
+  namespaceMap: { [key: string]: string[] },
+}
+
 // a global map for relations
-export const GlobalContext = React.createContext({
-  nodeMap: {} as { [key: string]: string },
-  ipLogMap: {} as { [key: string]: string },
-  namespaceMap: {} as { [key: string]: string[] },
+export const GlobalContext = React.createContext<GlobalContextType>({
+  nodeMap: {},
+  ipLogMap: {},
+  namespaceMap: {},
 });
 
 export const getDefaultTheme = () =>
@@ -59,8 +65,8 @@ const App = () => {
   useEffect(() => {
     getNodeList().then((res) => {
       if (res?.data?.data?.summary) {
-        const nodeMap = {} as { [key: string]: string };
-        const ipLogMap = {} as { [key: string]: string };
+        const nodeMap: GlobalContextType['nodeMap'] = {};
+        const ipLogMap: GlobalContextType['ipLogMap'] = {};
         res.data.data.summary.forEach(({ hostname, raylet, ip, logUrl }) => {
           nodeMap[hostname] = raylet.nodeId;
           ipLogMap[ip] = logUrl;

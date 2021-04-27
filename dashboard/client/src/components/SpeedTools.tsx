@@ -119,9 +119,9 @@ const ObjectIdReader = () => {
 
 const Tools = () => {
   const [sel, setSel] = useState("oid_converter");
-  const toolMap = {
+  const toolMap:{ [key: string]: JSX.Element } = {
     oid_converter: <ObjectIdReader />,
-  } as { [key: string]: JSX.Element };
+  };
 
   return (
     <div>

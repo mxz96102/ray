@@ -12,7 +12,11 @@ import { CSSProperties } from "@material-ui/core/styles/withStyles";
 import React, { ReactNode } from "react";
 import { ActorEnum } from "../type/actor";
 
-const colorMap = {
+const colorMap: {
+  [key: string]: {
+    [key: string]: Color;
+  };
+} = {
   node: {
     ALIVE: green,
     DEAD: red,
@@ -32,18 +36,14 @@ const colorMap = {
     FINISHED: cyan,
     FAILED: red,
   },
-} as {
-  [key: string]: {
-    [key: string]: Color;
-  };
 };
 
-const typeMap = {
+const typeMap: {
+  [key: string]: Color;
+} = {
   deps: blue,
   INFO: cyan,
   ERROR: red,
-} as {
-  [key: string]: Color;
 };
 
 export const StatusChip = ({

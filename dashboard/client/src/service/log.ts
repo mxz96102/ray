@@ -18,17 +18,17 @@ export const getLogDetail = async (url: string) => {
   if (rsp.headers["content-type"]?.includes("html")) {
     const el = document.createElement("div");
     el.innerHTML = rsp.data;
-    const arr = [].map.call(
-      el.getElementsByTagName("li"),
+    let arr: { [key: string]: string }[] = Array.from(el.getElementsByTagName("li")).map(
       (li: HTMLLIElement) => {
         const a = li.children[0] as HTMLAnchorElement;
-        return {
+        const result: { [key: string]: string } = {
           name: li.innerText,
           href: li.innerText.includes("http") ? a.href : a.pathname,
-        } as { [key: string]: string };
+        }
+        return result;
       },
     );
-    return arr as { [key: string]: string }[];
+    return arr;
   }
 
   return rsp.data as string;

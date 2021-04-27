@@ -9,7 +9,7 @@ const StateCounter = ({
   type: string;
   list: { state: string }[];
 }) => {
-  const stateMap = {} as { [state: string]: number };
+  const stateMap: { [state: string]: number } = {};
   list.forEach(({ state }) => {
     stateMap[state] = stateMap[state] + 1 || 1;
   });

@@ -90,7 +90,7 @@ const WorkerDetailTable = ({
   actorMap: { [actorId: string]: Actor };
   coreWorkerStats: CoreWorkerStats[];
 }) => {
-  const actors = {} as { [actorId: string]: Actor };
+  const actors: { [actorId: string]: Actor } = {};
   (coreWorkerStats || [])
     .filter((e) => actorMap[e.actorId])
     .forEach((e) => (actors[e.actorId] = actorMap[e.actorId]));
