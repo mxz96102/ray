@@ -17,7 +17,6 @@ import { Link } from "react-router-dom";
 import { GlobalContext } from "../App";
 import { Actor } from "../type/actor";
 import { Worker } from "../type/worker";
-import { longTextCut } from "../util/func";
 import { useFilter } from "../util/hook";
 import StateCounter from "./StatesCounter";
 import { StatusChip } from "./StatusChip";
